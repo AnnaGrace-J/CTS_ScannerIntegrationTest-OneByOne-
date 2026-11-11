@@ -1,0 +1,37 @@
+@if (IsOpen)
+{
+    <div class="dialog-backdrop" @onclick="HandleCancel">
+        <section class="confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-title" @onclick:stopPropagation>
+            <div class="dialog-header">
+                <span class="dialog-icon" aria-hidden="true">@(IsDanger ? "⚠️" : "ℹ️")</span>
+                <h2 id="modal-title">@Title</h2>
+            </div>
+            <div class="dialog-body">
+                <p>@Message</p>
+                @if (ChildContent is not null)
+                {
+                    @ChildContent
+                }
+            </div>
+            <div class="dialog-actions">
+                <button type="button" class="secondary-button" @onclick="HandleCancel">@CancelLabel</button>
+                <button type="button" class="@(IsDanger ? "danger-button" : "primary-button")" @onclick="HandleConfirm">@ConfirmLabel</button>
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string Title { get; set; } = "Confirm Action";
+    [Parameter] public string Message { get; set; } = string.Empty;
+    [Parameter] public string ConfirmLabel { get; set; } = "Confirm";
+    [Parameter] public string CancelLabel { get; set; } = "Cancel";
+    [Parameter] public bool IsDanger { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private async Task HandleConfirm() => await OnConfirm.InvokeAsync();
+    private async Task HandleCancel() => await OnCancel.InvokeAsync();
+}

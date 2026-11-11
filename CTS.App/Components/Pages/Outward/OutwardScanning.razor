@@ -1,0 +1,2506 @@
+@page "/outward/scanning"
+@attribute [Authorize]
+@inject WorkspaceApiService Client
+@inject NavigationManager Navigation
+@inject IHttpClientFactory HttpClientFactory
+@using CTS.Shared.Features.Scanner
+
+@*
+// Original Code
+// @page "/outward/scanning"
+// @attribute [Authorize]
+// <WorkflowWorkspace Workstep="SCANNING_DATA_ENTRY" />
+*@
+
+@* // Modified by KK *@
+<PageTitle>Outward Scanning & Data Entry · ACE CTS</PageTitle>
+
+<div class="demo-ops-root">
+    @* --- Compact Top Bar or Full Header --- *@
+    @if (_infoCollapsed)
+    {
+        <div class="demo-card demo-compact-bar">
+            <div class="demo-compact-left">
+                <span class="demo-title-compact">Outward Scanning & Data Entry</span>
+                <span class="demo-status-pill @(_currentBatch != null ? "status-open" : "status-nobatch")">
+                    @(_currentBatch != null ? "Open" : "No Batch")
+                </span>
+                <span class="demo-chip chip-cyan">BRANCH <strong>@_branchName</strong></span>
+                <span class="demo-chip chip-blue">BATCH <strong>@(_currentBatch?.Id ?? "Not created")</strong></span>
+                <span class="demo-chip chip-blue">CHEQUES <strong>@_drafts.Count</strong></span>
+                <span class="demo-chip chip-cyan">CALC <strong>@CalculatedAmount.ToString("N0")</strong></span>
+                <span class="demo-chip @(_validationErrors.Count > 0 ? "chip-danger" : _drafts.Count > 0 ? "chip-success" : "chip-blue")">
+                    VALIDATION <strong>@ValidationStatus</strong>
+                </span>
+            </div>
+            <button class="demo-ghost-btn" @onclick="() => _infoCollapsed = false">
+                <span class="demo-icon">◉</span> Show Info
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="demo-card demo-header-card">
+            <div class="demo-header-top">
+                <div class="demo-breadcrumbs">
+                    <span class="demo-bc-bold">ACE CTS Workspace</span>
+                    <span class="demo-bc-slash">/</span>
+                    <span class="demo-bc-dim">Outward Clearing</span>
+                    <span class="demo-bc-slash">/</span>
+                    <span class="demo-bc-dim">Scanning</span>
+                </div>
+                <div class="demo-top-badges">
+                    <span class="demo-audit-badge">Audit events: <strong>59</strong></span>
+                    <span class="demo-user-badge">admin1</span>
+                </div>
+            </div>
+            <div class="demo-header-bottom">
+                <div class="demo-title-cluster">
+                    <h1 class="demo-main-title">Outward Scanning & Data Entry</h1>
+                    <span class="demo-status-pill @(_currentBatch != null ? "status-open" : "status-nobatch")">
+                        @(_currentBatch != null ? "Open" : "No Batch")
+                    </span>
+                    <span class="demo-chip chip-cyan">BRANCH <strong>@_branchName</strong></span>
+                    <span class="demo-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+                    <span class="demo-chip chip-blue">DATE <strong>@DateTime.Today.ToString("M/d/yyyy")</strong></span>
+                </div>
+                <div class="demo-header-actions">
+                    <button class="demo-ghost-btn" @onclick="() => _infoCollapsed = true">
+                        <span class="demo-icon">◎</span> Hide Info
+                    </button>
+                    <button class="demo-ghost-btn" disabled="@(_drafts.Count == 0)" @onclick="PrevCheque">
+                        ◀ Prev
+                    </button>
+                    <button class="demo-ghost-btn" disabled="@(_drafts.Count == 0)" @onclick="NextCheque">
+                        Next ▶
+                    </button>
+                </div>
+            </div>
+
+            <div class="demo-summary-row" style="margin-top: 12px;">
+                <div class="demo-pills-wrap">
+                    <span class="demo-summary-pill pill-cyan">ACCOUNT <strong>@(Selected?.AccountFetched == true ? "Fetched" : "Not fetched")</strong></span>
+                    <span class="demo-summary-pill pill-blue">SCANNER <strong>FB 30 U</strong></span>
+                    <span class="demo-summary-pill pill-blue">BATCH TOTAL <strong>@(string.IsNullOrEmpty(_batchAmountInput) ? "0" : Convert.ToInt64(_batchAmountInput).ToString("N0"))</strong></span>
+                    <span class="demo-summary-pill pill-cyan">CALCULATED <strong>@CalculatedAmount.ToString("N0")</strong></span>
+                    <span class="demo-summary-pill pill-blue">CHEQUES <strong>@_drafts.Count</strong></span>
+                    <span class="demo-summary-pill @(_validationErrors.Count > 0 ? "pill-danger" : "pill-cyan")">VALIDATION <strong>@ValidationStatus</strong></span>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* --- Validation Errors Alert Banner --- *@
+    @if (_validationErrors.Count > 0)
+    {
+        <div class="demo-alert demo-alert-danger">
+            <strong>Validation Issues:</strong>
+            <ul style="margin: 4px 0 0 16px; padding: 0;">
+                @foreach (var err in _validationErrors)
+                {
+                    <li>@err</li>
+                }
+            </ul>
+        </div>
+    }
+
+    @* --- Info / Success Banner --- *@
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="demo-alert demo-alert-warning">
+            <span>@_message</span>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(_success))
+    {
+        <div class="demo-alert demo-alert-success">
+            <span>✔ @_success</span>
+        </div>
+    }
+
+    @* --- OneByOne Paused in Track Banner --- *@
+    @if (_isPaperWaitingInTrack && _pausedCheque != null)
+    {
+        <div class="demo-alert demo-alert-warning" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:10px 14px;">
+            <div>
+                <strong>⏸ CHEQUE PAUSED IN TRACK:</strong>
+                <span>Cheque No: <strong>@_pausedCheque.ChequeNo</strong> | Routing: <strong>@_pausedCheque.MicrRoutingNumber</strong> | A/C: <strong>@_pausedCheque.MicrAccountNo</strong></span>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button class="demo-action-btn btn-primary" style="background:#16a34a; border-color:#16a34a; color:#fff;" @onclick="EjectAndPrint">
+                    🖨 Eject &amp; Print Stamp
+                </button>
+                <button class="demo-action-btn btn-secondary" @onclick="EjectWithoutPrint">
+                    ⏏ Eject Clean (No Ink)
+                </button>
+            </div>
+        </div>
+    }
+
+    @* ==========================================
+       3-COLUMN WORKSPACE GRID
+       ========================================== *@
+    <div class="scanning-3col-grid">
+        @* ----------------------------------------
+           LEFT COLUMN: CHEQUE IMAGE VIEWER
+           ---------------------------------------- *@
+        <div class="scanning-col left-col">
+            <div class="demo-card img-tabs-card">
+                <div class="img-tabs-bar">
+                    <button class="img-tab-btn @(_imageTab == "Front B&W" ? "active" : "")" @onclick='() => _imageTab = "Front B&W"'>Front B&W</button>
+                    <button class="img-tab-btn @(_imageTab == "Rear B&W" ? "active" : "")" @onclick='() => _imageTab = "Rear B&W"'>Rear B&W</button>
+                    <button class="img-tab-btn @(_imageTab == "Front Gray" ? "active" : "")" @onclick='() => _imageTab = "Front Gray"'>Front Gray</button>
+                    <button class="img-tab-btn @(_imageTab == "Front UV" ? "active" : "")" @onclick='() => _imageTab = "Front UV"'>Front UV</button>
+                </div>
+            </div>
+
+            <div class="demo-card viewer-card">
+                <div class="viewer-header">
+                    <div>
+                        <div class="viewer-title">Cheque Image Viewer</div>
+                        <div class="viewer-subtitle">@(Selected != null ? $"Cheque {Selected.ChequeNo}" : "No cheque selected")</div>
+                    </div>
+                    <div class="viewer-controls">
+                        <button class="viewer-tool-btn" title="Zoom Out" @onclick="ZoomOut">🔍-</button>
+                        <button class="viewer-tool-btn" title="Zoom In" @onclick="ZoomIn">🔍+</button>
+                        <button class="viewer-tool-btn" title="Rotate" @onclick="RotateImage">⟳</button>
+                        <button class="viewer-tool-btn" title="Fit / Reset" @onclick="ResetZoom">⛶</button>
+                    </div>
+                </div>
+
+                <div class="viewer-badges">
+                    <span class="viewer-status-badge @(Selected?.ImageQualityFlags.Count > 0 ? "badge-iqa" : "badge-ok")">
+                        @(Selected?.ImageQualityFlags.Count > 0 ? "IQA Review" : "Image OK")
+                    </span>
+                    <span class="viewer-chip">UIC @(Selected?.Uic ?? "Not assigned")</span>
+                    <span class="viewer-chip">Endorsement @(Selected?.Uic != null ? Selected.Uic.Substring(Math.Max(0, Selected.Uic.Length - 10)) : "Pending")</span>
+                </div>
+
+                <div class="cheque-canvas-container">
+                    <div class="cheque-viewport" style="transform: scale(@_zoomLevel) rotate(@(_rotation)deg);">
+                        <img src="@CurrentChequeImageUrl" alt="Cheque Image" class="cheque-img" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* ----------------------------------------
+           MIDDLE COLUMN: BATCH INSTRUMENT LIST & SCANNER CONTROLS
+           ---------------------------------------- *@
+        <div class="scanning-col mid-col">
+            @* Batch Instrument List *@
+            <div class="demo-card instrument-list-card">
+                <div class="panel-header-title">Batch Instrument List</div>
+                <div class="table-container">
+                    <table class="demo-table">
+                        <thead>
+                            <tr>
+                                <th>SEQ</th>
+                                <th>CHEQUE NO</th>
+                                <th>ROUTING NO</th>
+                                <th>AMOUNT</th>
+                                <th>STATUS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_drafts.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="5" class="empty-cell">
+                                        <div class="empty-state">
+                                            <div class="empty-icon">📄</div>
+                                            <div class="empty-text-bold">No records found</div>
+                                            <div class="empty-text-sub">Adjust filters or run the relevant demo service to create work items.</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @for (int i = 0; i < _drafts.Count; i++)
+                                {
+                                    var idx = i;
+                                    var item = _drafts[i];
+                                    var isSel = idx == _selectedIndex;
+                                    <tr class="@(isSel ? "row-selected" : "")" @onclick="() => _selectedIndex = idx">
+                                        <td>@(idx + 1)</td>
+                                        <td class="font-bold">@item.ChequeNo</td>
+                                        <td>@item.MicrRoutingNumber</td>
+                                        <td>@(string.IsNullOrEmpty(item.Amount) ? "0" : Convert.ToInt64(item.Amount).ToString("N0"))</td>
+                                        <td>
+                                            <span class="table-status-pill @(item.Discard ? "status-discard" : "status-scanned")">
+                                                @(item.Discard ? "Discarded" : "Scanned")
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @* Scanner Batch Controls *@
+            <div class="demo-card scanner-controls-card">
+                <div class="panel-header-title">Scanner Batch Controls</div>
+                <div class="form-group-item">
+                    <label class="form-field-label">SCANNER</label>
+                    <select class="demo-form-input" @bind="_selectedScanner">
+                        <option value="FB 30 U">FB 30 U</option>
+                    </select>
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">SAVED BATCHES</label>
+                    <select class="demo-form-input" value="@_selectedSavedBatch" @onchange="OnSavedBatchChange">
+                        <option value="OUT-0601-01">OUT-0601-01</option>
+                        <option value="OUT-0601-02">OUT-0601-02</option>
+                    </select>
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">PRESENTING BRANCH</label>
+                    <input class="demo-form-input" disabled value="@_branchName" />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">CLEARING CYCLE</label>
+                    <input class="demo-form-input" disabled value="1" />
+                </div>
+            </div>
+        </div>
+
+        @* ----------------------------------------
+           RIGHT COLUMN: FORM PANELS
+           ---------------------------------------- *@
+        <div class="scanning-col right-col">
+            @* Credit Account Panel *@
+            <div class="demo-card form-section-card">
+                <div class="panel-header-title">Credit Account</div>
+                <div class="form-group-item">
+                    <label class="form-field-label">ACCOUNT NO.</label>
+                    <input class="demo-form-input" value="@(Selected?.AccountNo ?? "")" @oninput="OnAccountNoInput" placeholder="Enter 15 digits" />
+                </div>
+                <div class="form-group-item">
+                    <button class="btn-fetch-account" disabled="@(Selected == null)" @onclick="FetchAccount">
+                        Fetch Account
+                    </button>
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">ACCOUNT STATUS</label>
+                    <input class="demo-form-input" disabled value="@(Selected?.Account?.Status ?? "")" />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">CUSTOMER ID</label>
+                    <input class="demo-form-input" disabled value="@(Selected?.Account?.Id ?? "")" />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">ACCOUNT BRANCH</label>
+                    <input class="demo-form-input" disabled value="@(Selected?.Account?.BranchName ?? "")" />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">ACCOUNT NAME</label>
+                    <input class="demo-form-input" disabled value="@(Selected?.Account?.CustomerName ?? "")" />
+                </div>
+            </div>
+
+            @* MICR Details Panel *@
+            <div class="demo-card form-section-card">
+                <div class="panel-header-title">MICR Details</div>
+                <div class="form-group-item">
+                    <label class="form-field-label">CHEQUE NO.</label>
+                    <input class="demo-form-input" value="@(Selected?.ChequeNo ?? "")" @oninput='e => UpdateSelectedField("ChequeNo", e.Value?.ToString() ?? "")' />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">MICR ACCOUNT NO.</label>
+                    <input class="demo-form-input" value="@(Selected?.MicrAccountNo ?? "")" @oninput='e => UpdateSelectedField("MicrAccountNo", e.Value?.ToString() ?? "")' />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">ROUTING NUMBER</label>
+                    <input class="demo-form-input" value="@(Selected?.MicrRoutingNumber ?? "")" @oninput='e => UpdateSelectedField("MicrRoutingNumber", e.Value?.ToString() ?? "")' />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">BANK NAME</label>
+                    <input class="demo-form-input" disabled value="@(Selected?.BankName ?? "")" />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">CHEQUE TYPE</label>
+                    <input class="demo-form-input" value="@(Selected?.ChequeType ?? "Current Dated Normal")" @oninput='e => UpdateSelectedField("ChequeType", e.Value?.ToString() ?? "")' />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">CHECK DIGIT</label>
+                    <input class="demo-form-input" value="@(Selected?.CheckDigit ?? "")" @oninput='e => UpdateSelectedField("CheckDigit", e.Value?.ToString() ?? "")' />
+                </div>
+            </div>
+
+            @* Cheque Amount & Date Panel *@
+            <div class="demo-card form-section-card">
+                <div class="panel-header-title">Cheque Amount & Date</div>
+                <div class="form-group-item">
+                    <label class="form-field-label">AMOUNT</label>
+                    <input class="demo-form-input" value="@(Selected?.Amount ?? "")" @oninput='e => UpdateSelectedField("Amount", Digits(e.Value?.ToString() ?? ""))' />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">CHEQUE DATE</label>
+                    <input class="demo-form-input" type="date" value="@(Selected?.ChequeDate ?? DateTime.Today.ToString("yyyy-MM-dd"))" @oninput='e => UpdateSelectedField("ChequeDate", e.Value?.ToString() ?? "")' />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">DRAWER NAME</label>
+                    <input class="demo-form-input" value="@(Selected?.DrawerName ?? "")" @oninput='e => UpdateSelectedField("DrawerName", e.Value?.ToString() ?? "")' />
+                </div>
+            </div>
+
+            @* Batch Summary Panel *@
+            <div class="demo-card form-section-card">
+                <div class="panel-header-title">Batch Summary</div>
+                <div class="form-group-item">
+                    <label class="form-field-label">BATCH ID</label>
+                    <input class="demo-form-input" disabled value="@(_currentBatch?.Id ?? "")" />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">BATCH TYPE</label>
+                    <input class="demo-form-input" disabled value="CDC" />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">BATCH AMOUNT</label>
+                    <input class="demo-form-input" value="@_batchAmountInput" @oninput="OnBatchAmountInput" />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">CALCULATED AMOUNT</label>
+                    <input class="demo-form-input" disabled value="@CalculatedAmount" />
+                </div>
+                <div class="form-group-item">
+                    <label class="form-field-label">TOTAL CHEQUES</label>
+                    <input class="demo-form-input" disabled value="@_drafts.Count" />
+                </div>
+            </div>
+
+            @* Remarks / Discard Panel *@
+            <div class="demo-card form-section-card">
+                <div class="panel-header-title">Remarks / Discard</div>
+                <div class="form-group-item">
+                    <label class="form-field-label">REMARKS</label>
+                    <input class="demo-form-input" value="@(Selected?.Remarks ?? "")" @oninput='e => UpdateSelectedField("Remarks", e.Value?.ToString() ?? "")' />
+                </div>
+                <div class="checkbox-container">
+                    <label class="checkbox-label">
+                        <input type="checkbox" checked="@(Selected?.Discard ?? false)" disabled="@(Selected == null)" @onchange="OnDiscardToggle" />
+                        <span>Discard Cheque</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ==========================================
+       BOTTOM STICKY ACTION BAR
+       ========================================== *@
+    <div class="demo-action-bar-bottom">
+        <div class="demo-action-bar-inner">
+            <button class="demo-action-btn btn-primary-dark" @onclick="() => _showNewBatchModal = true">
+                📄 New Batch
+            </button>
+            <button class="demo-action-btn btn-secondary" @onclick="OpenSavedBatch">
+                📁 Open Batch
+            </button>
+            @if (_isPaperWaitingInTrack)
+            {
+                <button class="demo-action-btn btn-primary" style="background:#16a34a; border-color:#16a34a; color:#fff;" @onclick="EjectAndPrint">
+                    🖨 Eject &amp; Print
+                </button>
+                <button class="demo-action-btn btn-secondary" @onclick="EjectWithoutPrint">
+                    ⏏ Eject Clean
+                </button>
+            }
+            else
+            {
+                <button class="demo-action-btn btn-primary-dark" @onclick="ScanSingleCheque">
+                    ⛶ Feed Single Cheque
+                </button>
+            }
+            <button class="demo-action-btn btn-secondary" @onclick="SaveDraft">
+                💾 Save
+            </button>
+            <button class="demo-action-btn btn-primary-dark" @onclick="SubmitBatch">
+                ✔ Submit Batch
+            </button>
+            <button class="demo-action-btn btn-danger" @onclick="DiscardBatch">
+                🗑 Discard Batch
+            </button>
+            <button class="demo-action-btn btn-secondary" @onclick="ExitScanning">
+                ✕ Exit
+            </button>
+        </div>
+    </div>
+</div>
+
+@* ==========================================
+   MODAL: NEW BATCH SETUP (3-STEP WIZARD)
+   ========================================== *@
+@if (_showNewBatchModal)
+{
+    <div class="demo-modal-overlay">
+        <div class="demo-modal-content">
+            <div class="demo-modal-header">
+                <div class="demo-modal-title">New Batch Setup</div>
+                <div class="demo-modal-steps">
+                    <div class="demo-step @(_newBatchStep == 1 ? "step-active" : "")">Step 1: Batch Information</div>
+                    <div class="demo-step @(_newBatchStep == 2 ? "step-active" : "")">Step 2: Scanner Options</div>
+                    <div class="demo-step @(_newBatchStep == 3 ? "step-active" : "")">Step 3: Confirmation</div>
+                </div>
+            </div>
+            <div class="demo-modal-body">
+                @if (_newBatchStep == 1)
+                {
+                    <div class="modal-grid-2col">
+                        <div class="form-group-item">
+                            <label class="form-field-label">Presenting Bank</label>
+                            <input class="demo-form-input" disabled value="ACE Demo Bank" />
+                        </div>
+                        <div class="form-group-item">
+                            <label class="form-field-label">Presenting Branch</label>
+                            <input class="demo-form-input" disabled value="@_branchName" />
+                        </div>
+                        <div class="form-group-item">
+                            <label class="form-field-label">Batch Type</label>
+                            <input class="demo-form-input" value="CDC" />
+                        </div>
+                        <div class="form-group-item">
+                            <label class="form-field-label">Scan Date</label>
+                            <input class="demo-form-input" disabled value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="form-group-item">
+                            <label class="form-field-label">Clearing Cycle</label>
+                            <input class="demo-form-input" value="1" />
+                        </div>
+                    </div>
+                }
+                else if (_newBatchStep == 2)
+                {
+                    <div class="scanner-options-box">
+                        <div class="text-sm-bold">Scanner Options</div>
+                        <p class="text-xs-dim">Configure capture options for this outward batch.</p>
+                        <label class="checkbox-row">
+                            <input type="checkbox" checked="@_enableEndorsement" @onchange="e => _enableEndorsement = (bool)(e.Value ?? false)" />
+                            <span>Enable Endorsement</span>
+                        </label>
+                        <label class="checkbox-row">
+                            <input type="checkbox" checked disabled />
+                            <span>Scanner UV Enabled</span>
+                        </label>
+                    </div>
+                }
+                else if (_newBatchStep == 3)
+                {
+                    <div class="confirmation-box">
+                        <div class="text-sm-bold">Ready to create batch</div>
+                        <div class="summary-dl">
+                            <div><span class="dl-label">Presenting Bank:</span> <strong>ACE Demo Bank</strong></div>
+                            <div><span class="dl-label">Presenting Branch:</span> <strong>@_branchName</strong></div>
+                            <div><span class="dl-label">Batch Type:</span> <strong>CDC</strong></div>
+                            <div><span class="dl-label">Scan Date:</span> <strong>@DateTime.Today.ToString("yyyy-MM-dd")</strong></div>
+                            <div><span class="dl-label">Clearing Cycle:</span> <strong>1</strong></div>
+                            <div><span class="dl-label">Scanner UV Enabled:</span> <strong>Yes</strong></div>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="demo-modal-footer">
+                <button class="demo-action-btn btn-secondary" @onclick="() => { _showNewBatchModal = false; _newBatchStep = 1; }">
+                    Close
+                </button>
+                @if (_newBatchStep > 1)
+                {
+                    <button class="demo-action-btn btn-secondary" @onclick="() => _newBatchStep--">Back</button>
+                }
+                @if (_newBatchStep < 3)
+                {
+                    <button class="demo-action-btn btn-primary-dark" @onclick="() => _newBatchStep++">Next</button>
+                }
+                else
+                {
+                    <button class="demo-action-btn btn-primary-dark" @onclick="ConfirmCreateBatch">OK</button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@* ==========================================
+   MODAL: IMAGE QUALITY REVIEW (IQA)
+   ========================================== *@
+@if (_showIqaModal && _iqaIndex.HasValue && _drafts.Count > _iqaIndex.Value)
+{
+    var item = _drafts[_iqaIndex.Value];
+    <div class="demo-modal-overlay">
+        <div class="demo-modal-content max-w-5xl">
+            <div class="demo-modal-header iqa-header">
+                <div class="demo-modal-title text-danger">⚠️ Image Quality Review</div>
+                <div class="text-xs-dim uppercase">Review IQA exceptions before batch submit</div>
+            </div>
+            <div class="iqa-body-grid">
+                <div class="iqa-image-box">
+                    <img src="@GetChequeImageUrl(item, "Front B&W")" alt="IQA Flagged Cheque" class="cheque-img" />
+                </div>
+                <div class="iqa-checks-box">
+                    <div class="text-sm-bold">Failed IQA Reasons</div>
+                    <div class="iqa-tags-wrap">
+                        @foreach (var reason in item.ImageQualityFlags)
+                        {
+                            <span class="iqa-tag">@reason</span>
+                        }
+                    </div>
+                    <div class="text-sm-bold" style="margin-top: 12px;">All review checks</div>
+                    <div class="iqa-checks-list">
+                        @foreach (var reason in _allIqaReasons)
+                        {
+                            <label class="checkbox-row-sm">
+                                <input type="checkbox" checked="@item.ImageQualityFlags.Contains(reason)" @onchange="() => ToggleIqaFlag(item, reason)" />
+                                <span>@reason</span>
+                            </label>
+                        }
+                    </div>
+                    <div class="form-group-item" style="margin-top: 12px;">
+                        <label class="form-field-label">Discard Remarks</label>
+                        <input class="demo-form-input" @bind="_iqaDiscardRemarks" placeholder="Enter reason if discarding..." />
+                    </div>
+                </div>
+            </div>
+            <div class="demo-modal-footer">
+                <button class="demo-action-btn btn-secondary" @onclick="IqaRescan">⟳ Rescan</button>
+                <button class="demo-action-btn btn-primary-dark" @onclick="IqaAccept">Accept Image</button>
+                <button class="demo-action-btn btn-danger" @onclick="IqaDiscard">Discard Cheque</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ==========================================
+   SELF-CONTAINED STYLES MATCHING THE UI
+   ========================================== *@
+@*
+<style>
+    .demo-ops-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #172033;
+        background: #F5F7FA;
+        min-height: calc(100vh - 70px);
+        padding: 12px 16px 24px;
+        box-sizing: border-box;
+    }
+    .demo-ops-root * { box-sizing: border-box; }
+
+    .demo-card {
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 3px rgba(15, 42, 68, 0.05);
+    }
+
+    /* Compact Top Bar */
+    .demo-compact-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    .demo-compact-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .demo-title-compact {
+        font-size: 15px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin-right: 6px;
+    }
+
+    /* Full Header */
+    .demo-header-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    .demo-breadcrumbs { font-size: 13px; color: #667085; }
+    .demo-bc-bold { font-weight: 700; color: #172033; }
+    .demo-bc-slash { margin: 0 6px; color: #A0AEC0; }
+    .demo-bc-dim { color: #667085; }
+
+    .demo-top-badges { display: flex; align-items: center; gap: 8px; }
+    .demo-audit-badge, .demo-user-badge {
+        font-size: 12px;
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 4px 10px;
+        color: #172033;
+    }
+    .demo-user-badge { font-weight: 700; }
+
+    .demo-header-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        border-top: 1px solid #EEF2F6;
+        padding-top: 10px;
+    }
+    .demo-title-cluster { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .demo-main-title { font-size: 18px; font-weight: 800; margin: 0; color: #0F2A44; }
+    .demo-header-actions { display: flex; align-items: center; gap: 8px; }
+
+    /* Pills & Chips */
+    .demo-status-pill {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 12px;
+        text-transform: uppercase;
+    }
+    .status-open { background: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0; }
+    .status-nobatch { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+
+    .demo-chip {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 12px;
+        text-transform: uppercase;
+    }
+    .chip-cyan { background: #E0F2FE; color: #0369A1; border: 1px solid #BAE6FD; }
+    .chip-blue { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+    .chip-success { background: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0; }
+    .chip-danger { background: #FEE2E2; color: #B91C1C; border: 1px solid #FECACA; }
+
+    .demo-pills-wrap { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+    .demo-summary-pill {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 14px;
+        border: 1px solid transparent;
+    }
+    .pill-cyan { background: #F0FDF4; border-color: #DCFCE7; color: #166534; }
+    .pill-blue { background: #F0F9FF; border-color: #E0F2FE; color: #075985; }
+    .pill-danger { background: #FEF2F2; border-color: #FEE2E2; color: #991B1B; }
+
+    .demo-ghost-btn {
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #334155;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .demo-ghost-btn:hover:not(:disabled) { background: #F8FAFC; border-color: #CBD5E1; }
+    .demo-ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Alerts */
+    .demo-alert {
+        padding: 10px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        margin-bottom: 12px;
+    }
+    .demo-alert-danger { background: #FEF2F2; border: 1px solid #F87171; color: #991B1B; }
+    .demo-alert-warning { background: #FFFBEB; border: 1px solid #FCD34D; color: #92400E; }
+    .demo-alert-success { background: #F0FDF4; border: 1px solid #86EFAC; color: #166534; font-weight: 600; }
+
+    /* 3-Column Grid */
+    .scanning-3col-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 1fr 1fr;
+        gap: 14px;
+        align-items: start;
+    }
+    @@media (max-width: 1280px) {
+        .scanning-3col-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .scanning-col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    /* Left Column: Cheque Image Viewer */
+    .img-tabs-card { padding: 8px 12px; margin-bottom: 0; }
+    .img-tabs-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .img-tab-btn {
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #475569;
+        cursor: pointer;
+    }
+    .img-tab-btn.active {
+        background: #0F2A44;
+        color: #FFFFFF;
+        border-color: #0F2A44;
+    }
+
+    .viewer-card { padding: 14px; margin-bottom: 0; }
+    .viewer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    .viewer-title { font-size: 14px; font-weight: 800; color: #0F2A44; }
+    .viewer-subtitle { font-size: 12px; color: #64748B; }
+    .viewer-controls { display: flex; gap: 4px; }
+    .viewer-tool-btn {
+        background: #F8FAFC;
+        border: 1px solid #D8DEE6;
+        border-radius: 4px;
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .viewer-tool-btn:hover { background: #EEF2F6; }
+
+    .viewer-badges {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+    .viewer-status-badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 12px;
+    }
+    .badge-ok { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
+    .badge-iqa { background: #FEF3C7; color: #D97706; border: 1px solid #FDE68A; }
+    .viewer-chip {
+        font-size: 11px;
+        font-weight: 600;
+        background: #F8FAFC;
+        border: 1px solid #D8DEE6;
+        padding: 3px 8px;
+        border-radius: 12px;
+        color: #334155;
+    }
+
+    .cheque-canvas-container {
+        background: #F8FAFC;
+        border: 1px solid #D8DEE6;
+        border-radius: 8px;
+        padding: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        min-height: 240px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .cheque-viewport {
+        transition: transform 0.2s ease;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .cheque-img {
+        width: 100%;
+        max-width: 520px;
+        height: auto;
+        max-height: 240px;
+        object-fit: contain;
+        border-radius: 6px;
+        border: 1px solid #CBD5E1;
+        background: #FFFFFF;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        display: block;
+    }
+    .cheque-svg {
+        max-width: 100%;
+        height: auto;
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+
+    /* Middle Column: Tables & Scanner Controls */
+    .panel-header-title {
+        font-size: 13px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin-bottom: 10px;
+        letter-spacing: -0.01em;
+    }
+    .instrument-list-card { padding: 12px; margin-bottom: 0; min-height: 260px; }
+    .table-container {
+        overflow-x: auto;
+        border: 1px solid #E2E8F0;
+        border-radius: 6px;
+    }
+    .demo-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        text-align: left;
+    }
+    .demo-table th {
+        background: #F8FAFC;
+        color: #475569;
+        padding: 8px 10px;
+        font-weight: 700;
+        border-bottom: 1px solid #E2E8F0;
+        white-space: nowrap;
+    }
+    .demo-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid #F1F5F9;
+        color: #1E293B;
+        cursor: pointer;
+    }
+    .demo-table tr:hover td { background: #F8FAFC; }
+    .demo-table tr.row-selected td { background: #EFF6FF; }
+    .font-bold { font-weight: 700; }
+    .empty-cell { text-align: center; padding: 40px 10px !important; }
+    .empty-state { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .empty-icon { font-size: 28px; opacity: 0.6; }
+    .empty-text-bold { font-weight: 700; color: #475569; font-size: 13px; }
+    .empty-text-sub { color: #94A3B8; font-size: 11px; max-width: 240px; }
+
+    .table-status-pill {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 10px;
+        text-transform: uppercase;
+    }
+    .status-scanned { background: #EFF6FF; color: #1D4ED8; }
+    .status-discard { background: #FEE2E2; color: #B91C1C; }
+
+    .scanner-controls-card { padding: 12px; margin-bottom: 0; }
+
+    /* Right Column: Form Panels */
+    .form-section-card { padding: 12px; margin-bottom: 0; }
+    .form-group-item {
+        margin-bottom: 10px;
+    }
+    .form-group-item:last-child { margin-bottom: 0; }
+    .form-field-label {
+        display: block;
+        font-size: 10px;
+        font-weight: 700;
+        color: #475569;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 4px;
+    }
+    .demo-form-input {
+        width: 100%;
+        height: 34px;
+        padding: 6px 10px;
+        font-size: 12px;
+        color: #1E293B;
+        background: #FFFFFF;
+        border: 1px solid #CBD5E1;
+        border-radius: 6px;
+        outline: none;
+    }
+    .demo-form-input:focus { border-color: #0284C7; box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15); }
+    .demo-form-input:disabled { background: #F1F5F9; color: #64748B; cursor: not-allowed; }
+
+    .btn-fetch-account {
+        width: 100%;
+        height: 34px;
+        background: #0284C7;
+        color: #FFFFFF;
+        border: none;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .btn-fetch-account:hover:not(:disabled) { background: #0369A1; }
+    .btn-fetch-account:disabled { background: #CBD5E1; cursor: not-allowed; }
+
+    .checkbox-container {
+        margin-top: 8px;
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 6px;
+        padding: 8px 10px;
+    }
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #334155;
+        cursor: pointer;
+    }
+
+    /* Bottom Action Bar inside main content flow matching demo */
+    .demo-action-bar-bottom {
+        margin-top: 16px;
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 8px;
+        padding: 12px 16px;
+        box-shadow: 0 1px 3px rgba(15, 42, 68, 0.05);
+    }
+    .demo-action-bar-inner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .demo-action-btn {
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 700;
+        border-radius: 6px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid transparent;
+    }
+    .btn-primary-dark { background: #0F2A44; color: #FFFFFF; }
+    .btn-primary-dark:hover { background: #1E3A5F; }
+    .btn-secondary { background: #FFFFFF; border-color: #CBD5E1; color: #1E293B; }
+    .btn-secondary:hover { background: #F8FAFC; }
+    .btn-danger { background: #DC2626; color: #FFFFFF; }
+    .btn-danger:hover { background: #B91C1C; }
+
+    /* Modals */
+    .demo-modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        padding: 16px;
+    }
+    .demo-modal-content {
+        background: #FFFFFF;
+        border-radius: 12px;
+        border: 1px solid #D8DEE6;
+        width: 100%;
+        max-width: 600px;
+        overflow: hidden;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    }
+    .max-w-5xl { max-width: 900px; }
+    .demo-modal-header {
+        padding: 14px 18px;
+        border-bottom: 1px solid #E2E8F0;
+        background: #FFFFFF;
+    }
+    .demo-modal-title { font-size: 16px; font-weight: 800; color: #0F2A44; }
+    .demo-modal-steps {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 10px;
+    }
+    .demo-step {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        color: #64748B;
+        text-align: center;
+    }
+    .demo-step.step-active {
+        background: #F0FDFA;
+        border-color: #0D9488;
+        color: #0F2A44;
+    }
+    .demo-modal-body { padding: 18px; min-height: 220px; }
+    .modal-grid-2col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+    .scanner-options-box {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        padding: 10px;
+        border-radius: 6px;
+    }
+    .confirmation-box {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 14px;
+    }
+    .summary-dl {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 10px;
+        font-size: 12px;
+    }
+    .dl-label { color: #64748B; font-weight: 600; margin-right: 4px; }
+    .demo-modal-footer {
+        padding: 12px 18px;
+        background: #F8FAFC;
+        border-top: 1px solid #E2E8F0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+    /* IQA Modal Specifics */
+    .iqa-header { background: #FFF1F2; border-color: #FECDD3; }
+    .text-danger { color: #E11D48; }
+    .iqa-body-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 14px;
+        padding: 18px;
+    }
+    .iqa-image-box {
+        background: #F1F5F9;
+        border: 1px solid #CBD5E1;
+        border-radius: 8px;
+        padding: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .iqa-checks-box { display: flex; flex-direction: column; gap: 8px; }
+    .iqa-tags-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+    .iqa-tag {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 8px;
+        background: #FEF3C7;
+        color: #D97706;
+        border: 1px solid #FDE68A;
+        border-radius: 12px;
+    }
+    .iqa-checks-list {
+        max-height: 150px;
+        overflow-y: auto;
+        border: 1px solid #E2E8F0;
+        border-radius: 6px;
+        padding: 6px;
+    }
+    .checkbox-row-sm {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        padding: 4px 6px;
+    }
+    .text-sm-bold { font-size: 13px; font-weight: 700; color: #1E293B; }
+    .text-xs-dim { font-size: 11px; color: #64748B; }
+</style>
+*@
+
+<style>
+    .demo-ops-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: var(--text, #172033);
+        background: var(--background, #F5F7FA);
+        min-height: calc(100vh - 70px);
+        padding: 12px 16px 24px;
+        box-sizing: border-box;
+    }
+    .demo-ops-root * { box-sizing: border-box; }
+
+    .demo-card {
+        background: var(--surface-solid, #FFFFFF);
+        border: 1px solid var(--border, #D8DEE6);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        box-shadow: var(--shadow, 0 1px 3px rgba(15, 42, 68, 0.05));
+    }
+
+    /* Compact Top Bar */
+    .demo-compact-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    .demo-compact-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .demo-title-compact {
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--heading, #0F2A44);
+        margin-right: 6px;
+    }
+
+    /* Full Header */
+    .demo-header-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    .demo-breadcrumbs { font-size: 13px; color: var(--muted, #667085); }
+    .demo-bc-bold { font-weight: 700; color: var(--heading, #172033); }
+    .demo-bc-slash { margin: 0 6px; color: var(--placeholder, #A0AEC0); }
+    .demo-bc-dim { color: var(--muted, #667085); }
+
+    .demo-top-badges { display: flex; align-items: center; gap: 8px; }
+    .demo-audit-badge, .demo-user-badge {
+        font-size: 12px;
+        background: var(--surface, #FFFFFF);
+        border: 1px solid var(--border, #D8DEE6);
+        border-radius: 6px;
+        padding: 4px 10px;
+        color: var(--text, #172033);
+    }
+    .demo-user-badge { font-weight: 700; color: var(--heading, #0F2A44); }
+
+    .demo-header-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        border-top: 1px solid var(--separator, #EEF2F6);
+        padding-top: 10px;
+    }
+    .demo-title-cluster { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .demo-main-title { font-size: 18px; font-weight: 800; margin: 0; color: var(--heading, #0F2A44); }
+
+    /* Badges & Chips */
+    .demo-status-pill {
+        font-size: 11px;
+        font-weight: 800;
+        padding: 3px 8px;
+        border-radius: 4px;
+        text-transform: uppercase;
+    }
+    .status-open { background: rgba(16, 185, 129, 0.15); color: #16A34A; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .status-nobatch { background: var(--surface-secondary, #F3F4F6); color: var(--muted, #6B7280); border: 1px solid var(--border, #E5E7EB); }
+
+    .demo-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 4px;
+    }
+    .chip-cyan { background: rgba(8, 145, 178, 0.12); color: #06B6D4; border: 1px solid rgba(8, 145, 178, 0.3); }
+    .chip-blue { background: rgba(59, 130, 246, 0.12); color: #3B82F6; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .chip-danger { background: rgba(239, 68, 68, 0.12); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .chip-success { background: rgba(16, 185, 129, 0.12); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); }
+
+    /* Ghost Buttons */
+    .demo-ghost-btn {
+        background: var(--surface, #FFFFFF);
+        border: 1px solid var(--border, #D8DEE6);
+        border-radius: 6px;
+        padding: 5px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text, #172033);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .demo-ghost-btn:hover:not(:disabled) { background: var(--hover, #F8FAFC); }
+    .demo-ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Alerts */
+    .demo-alert {
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .demo-alert-warning { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #D97706; }
+    .demo-alert-success { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #059669; }
+    .demo-alert-danger { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #DC2626; }
+    .alert-error-list { margin: 4px 0 0 18px; padding: 0; font-size: 11px; }
+
+    /* 3-Column Layout */
+    .scanning-3col-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.95fr 0.9fr;
+        gap: 12px;
+        align-items: start;
+    }
+
+    /* Left Column: Viewer */
+    .img-tabs-card { padding: 6px 12px; }
+    .img-tabs-bar { display: flex; gap: 6px; }
+    .img-tab-btn {
+        background: none;
+        border: none;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted, #64748B);
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    .img-tab-btn.active { background: var(--primary, #0F2A44); color: #FFFFFF; }
+
+    .viewer-card { padding: 12px 16px; }
+    .viewer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    .viewer-title { font-size: 13px; font-weight: 800; color: var(--heading, #0F2A44); }
+    .viewer-subtitle { font-size: 11px; color: var(--muted, #64748B); }
+    .viewer-controls { display: flex; gap: 4px; }
+    .viewer-tool-btn {
+        background: var(--surface-secondary, #F8FAFC);
+        border: 1px solid var(--border, #D8DEE6);
+        color: var(--text, inherit);
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 11px;
+        cursor: pointer;
+    }
+    .viewer-tool-btn:hover { background: var(--hover, #EEF2F6); }
+
+    .viewer-badges { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+    .viewer-status-badge {
+        font-size: 10px;
+        font-weight: 800;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    .badge-ok { background: rgba(16, 185, 129, 0.15); color: #16A34A; }
+    .badge-iqa { background: rgba(239, 68, 68, 0.15); color: #DC2626; }
+    .viewer-chip {
+        font-size: 10px;
+        background: var(--surface-secondary, #F1F5F9);
+        border: 1px solid var(--border, #E2E8F0);
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: var(--muted, #475569);
+    }
+
+    .cheque-canvas-container {
+        border: 1px dashed var(--border, #CBD5E1);
+        background: var(--surface-secondary, #F8FAFC);
+        border-radius: 8px;
+        min-height: 240px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        position: relative;
+    }
+    .cheque-viewport {
+        transition: transform 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .cheque-img {
+        max-width: 95%;
+        max-height: 220px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        border: 1px solid var(--border, #CBD5E1);
+        background: #FFFFFF;
+    }
+
+    .micr-ocr-box {
+        margin-top: 10px;
+        background: var(--surface-secondary, #F8FAFC);
+        border: 1px solid var(--border, #E2E8F0);
+        border-radius: 6px;
+        padding: 8px 12px;
+    }
+    .ocr-label { font-size: 10px; font-weight: 800; color: var(--muted, #64748B); letter-spacing: 0.05em; }
+    .ocr-line { font-family: monospace; font-size: 13px; font-weight: 700; color: var(--heading, #0F2A44); margin-top: 2px; }
+
+    /* Center Column: Form */
+    .form-card { padding: 14px 18px; }
+    .form-card-title {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--heading, #0F2A44);
+        margin-bottom: 12px;
+        border-bottom: 1px solid var(--separator, #EEF2F6);
+        padding-bottom: 6px;
+    }
+    .form-grid-2col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+    .col-span-2 { grid-column: span 2; }
+    .form-label {
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted, #475569);
+    }
+    .form-input, .form-select, .demo-form-input {
+        border: 1px solid var(--border, #CBD5E1);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        color: var(--text, #172033);
+        background: var(--surface-solid, #FFFFFF);
+        outline: none;
+        width: 100%;
+        height: 34px;
+        box-sizing: border-box;
+    }
+    .form-input:focus, .form-select:focus, .demo-form-input:focus { border-color: var(--accent, #0284C7); box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15); }
+    .form-input-ro, .demo-form-input:disabled { background: var(--surface-secondary, #F1F5F9); color: var(--muted, #64748B); cursor: not-allowed; }
+
+    /* Middle Column Cards & Table Containers */
+    .instrument-list-card { padding: 12px; margin-bottom: 0; min-height: 260px; }
+    .scanner-controls-card { padding: 12px; margin-bottom: 0; }
+    .form-section-card { padding: 12px; margin-bottom: 0; }
+    .form-group-item { margin-bottom: 10px; }
+    .form-group-item:last-child { margin-bottom: 0; }
+    .form-field-label {
+        display: block;
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--muted, #475569);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 4px;
+    }
+    .btn-fetch-account {
+        width: 100%;
+        height: 34px;
+        background: #0284C7;
+        color: #FFFFFF;
+        border: none;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .btn-fetch-account:hover:not(:disabled) { background: #0369A1; }
+    .btn-fetch-account:disabled { background: #CBD5E1; cursor: not-allowed; }
+
+    .checkbox-container {
+        margin-top: 8px;
+        background: var(--surface-secondary, #F8FAFC);
+        border: 1px solid var(--border, #E2E8F0);
+        border-radius: 6px;
+        padding: 8px 10px;
+    }
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text, #334155);
+        cursor: pointer;
+    }
+
+    .table-status-pill {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 10px;
+        text-transform: uppercase;
+    }
+    .status-scanned { background: rgba(59, 130, 246, 0.15); color: #1D4ED8; }
+    .status-discard { background: rgba(239, 68, 68, 0.15); color: #B91C1C; }
+
+    .table-container {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--border, #CBD5E1);
+        border-radius: 6px;
+        background: var(--surface-solid, #FFFFFF);
+    }
+    .demo-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .demo-table th {
+        background: var(--surface-secondary, #F8FAFC);
+        color: var(--muted, #475569);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border, #CBD5E1);
+        text-align: left;
+    }
+    .demo-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--separator, #EEF2F6);
+        color: var(--text, #172033);
+    }
+    .demo-table tr:hover td { background: var(--hover, #F8FAFC); }
+    .demo-table tr.row-selected td { background: var(--accent-soft, #EFF6FF); }
+    .font-bold { font-weight: 700; }
+    .empty-cell { text-align: center; padding: 40px 10px !important; }
+    .empty-state { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .empty-icon { font-size: 28px; opacity: 0.6; }
+    .empty-text-bold { font-weight: 700; color: var(--muted, #475569); font-size: 13px; }
+    .empty-text-sub { color: var(--placeholder, #94A3B8); font-size: 11px; max-width: 240px; }
+
+    .demo-action-bar-bottom {
+        margin-top: 16px;
+        background: var(--surface-solid, #FFFFFF);
+        border: 1px solid var(--border, #D8DEE6);
+        border-radius: 8px;
+        padding: 12px 16px;
+        box-shadow: var(--shadow, 0 1px 3px rgba(15, 42, 68, 0.05));
+    }
+
+    /* Right Column: Account & Batch */
+    .acc-card { padding: 14px 18px; }
+    .acc-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        border-bottom: 1px solid var(--separator, #EEF2F6);
+        padding-bottom: 6px;
+    }
+    .acc-title { font-size: 13px; font-weight: 800; color: var(--heading, #0F2A44); }
+    .acc-badge-active {
+        font-size: 10px;
+        font-weight: 800;
+        background: rgba(16, 185, 129, 0.15);
+        color: #16A34A;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    .acc-data-list { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+    .acc-row { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--separator, #EEF2F6); padding-bottom: 4px; }
+    .acc-label { color: var(--muted, #64748B); }
+    .acc-val { font-weight: 600; color: var(--heading, #172033); }
+
+    .sig-box {
+        margin-top: 10px;
+        border: 1px solid var(--border, #E2E8F0);
+        border-radius: 6px;
+        padding: 8px;
+        text-align: center;
+        background: var(--surface-secondary, #FAFAFA);
+    }
+    .sig-title { font-size: 10px; font-weight: 800; color: var(--muted, #64748B); margin-bottom: 4px; text-transform: uppercase; }
+    .sig-img { height: 50px; width: 100%; object-fit: contain; }
+    .sig-sub { font-size: 10px; color: var(--muted, #94A3B8); margin-top: 4px; }
+
+    .batch-summary-card { padding: 14px 18px; }
+    .batch-sum-title { font-size: 13px; font-weight: 800; color: var(--heading, #0F2A44); margin-bottom: 10px; border-bottom: 1px solid var(--separator, #EEF2F6); padding-bottom: 6px; }
+    .batch-sum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .sum-box {
+        background: var(--surface-secondary, #F8FAFC);
+        border: 1px solid var(--border, #E2E8F0);
+        border-radius: 6px;
+        padding: 8px;
+    }
+    .sum-lbl { font-size: 10px; font-weight: 800; color: var(--muted, #64748B); text-transform: uppercase; }
+    .sum-num { font-size: 15px; font-weight: 800; color: var(--heading, #0F2A44); margin-top: 2px; }
+
+    /* Bottom Batch Cheque Grid */
+    .grid-card { padding: 0; overflow: hidden; margin-top: 12px; }
+    .grid-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--separator, #EEF2F6);
+    }
+    .grid-title { font-size: 13px; font-weight: 800; color: var(--heading, #0F2A44); }
+    .table-container { width: 100%; overflow-x: auto; }
+    .demo-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .demo-table th {
+        background: var(--surface-secondary, #F8FAFC);
+        color: var(--muted, #475569);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border, #E2E8F0);
+        text-align: left;
+    }
+    .demo-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--separator, #EEF2F6);
+        color: var(--text, #172033);
+    }
+    .row-selected { background: var(--accent-soft, #EFF6FF) !important; }
+    .row-discarded { opacity: 0.5; background: rgba(239, 68, 68, 0.15) !important; }
+    .row-clickable { cursor: pointer; }
+    .row-clickable:hover { background: var(--hover, #F8FAFC); }
+    .td-actions { display: flex; gap: 4px; }
+    .cell-btn-danger {
+        background: none;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #DC2626;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .cell-btn-success {
+        background: none;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        color: #16A34A;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    /* Fixed Bottom Action Bar */
+    .demo-action-bar {
+        margin-top: 12px;
+        background: var(--surface-solid, #FFFFFF);
+        border: 1px solid var(--border, #D8DEE6);
+        border-radius: 8px;
+        padding: 12px 16px;
+        box-shadow: var(--shadow, 0 1px 3px rgba(15, 42, 68, 0.05));
+    }
+    .demo-action-bar-inner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .demo-action-btn {
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 700;
+        border-radius: 6px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid transparent;
+    }
+    .btn-primary-dark { background: var(--primary, #0F2A44); color: #FFFFFF; }
+    .btn-primary-dark:hover { opacity: 0.9; }
+    .btn-secondary { background: var(--surface, #FFFFFF); border-color: var(--border, #CBD5E1); color: var(--text, #1E293B); }
+    .btn-secondary:hover { background: var(--hover, #F8FAFC); }
+    .btn-danger { background: #DC2626; color: #FFFFFF; }
+    .btn-danger:hover { background: #B91C1C; }
+
+    /* Modals */
+    .demo-modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        padding: 16px;
+    }
+    .demo-modal-content {
+        background: var(--surface-solid, #FFFFFF);
+        border-radius: 12px;
+        border: 1px solid var(--border, #D8DEE6);
+        width: 100%;
+        max-width: 600px;
+        overflow: hidden;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    }
+    .max-w-5xl { max-width: 900px; }
+    .demo-modal-header {
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--separator, #E2E8F0);
+        background: var(--surface-solid, #FFFFFF);
+    }
+    .demo-modal-title { font-size: 16px; font-weight: 800; color: var(--heading, #0F2A44); }
+    .demo-modal-steps {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 10px;
+    }
+    .demo-step {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: var(--surface-secondary, #F8FAFC);
+        border: 1px solid var(--border, #E2E8F0);
+        color: var(--muted, #64748B);
+        text-align: center;
+    }
+    .demo-step.step-active {
+        background: rgba(13, 148, 136, 0.15);
+        border-color: #0D9488;
+        color: var(--heading, #0F2A44);
+    }
+    .demo-modal-body { padding: 18px; min-height: 220px; }
+    .modal-grid-2col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+    .scanner-options-box {
+        background: var(--surface-secondary, #F8FAFC);
+        border: 1px solid var(--border, #E2E8F0);
+        border-radius: 8px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        background: var(--surface-solid, #FFFFFF);
+        border: 1px solid var(--border, #E2E8F0);
+        padding: 10px;
+        border-radius: 6px;
+        color: var(--text, inherit);
+    }
+    .confirmation-box {
+        background: var(--surface-secondary, #F8FAFC);
+        border: 1px solid var(--border, #E2E8F0);
+        border-radius: 8px;
+        padding: 14px;
+    }
+    .summary-dl {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 10px;
+        font-size: 12px;
+    }
+    .dl-label { color: var(--muted, #64748B); font-weight: 600; margin-right: 4px; }
+    .demo-modal-footer {
+        padding: 12px 18px;
+        background: var(--surface-secondary, #F8FAFC);
+        border-top: 1px solid var(--separator, #E2E8F0);
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+    /* IQA Modal Specifics */
+    .iqa-header { background: rgba(225, 29, 72, 0.12); border-color: rgba(225, 29, 72, 0.25); }
+    .text-danger { color: #E11D48; }
+    .iqa-body-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 14px;
+        padding: 18px;
+    }
+    .iqa-image-box {
+        background: var(--surface-secondary, #F1F5F9);
+        border: 1px solid var(--border, #CBD5E1);
+        border-radius: 8px;
+        padding: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .iqa-checks-box { display: flex; flex-direction: column; gap: 8px; }
+    .iqa-tags-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+    .iqa-tag {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 8px;
+        background: rgba(245, 158, 11, 0.15);
+        color: #D97706;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        border-radius: 12px;
+    }
+    .iqa-checks-list {
+        max-height: 150px;
+        overflow-y: auto;
+        border: 1px solid var(--border, #E2E8F0);
+        border-radius: 6px;
+        padding: 6px;
+    }
+    .checkbox-row-sm {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        padding: 4px 6px;
+        color: var(--text, inherit);
+    }
+    .text-sm-bold { font-size: 13px; font-weight: 700; color: var(--heading, #1E293B); }
+    .text-xs-dim { font-size: 11px; color: var(--muted, #64748B); }
+
+    /* Dark Mode Overrides */
+    html[data-theme="dark"] .demo-ops-root {
+        color: #F5F5F7;
+        background: #09090B;
+    }
+    html[data-theme="dark"] .demo-card,
+    html[data-theme="dark"] .demo-modal-content,
+    html[data-theme="dark"] .demo-modal-header,
+    html[data-theme="dark"] .demo-action-bar {
+        background: #1C1C1E;
+        border-color: rgba(235, 235, 245, 0.15);
+    }
+    html[data-theme="dark"] .demo-bc-bold,
+    html[data-theme="dark"] .demo-title-compact,
+    html[data-theme="dark"] .demo-main-title,
+    html[data-theme="dark"] .viewer-title,
+    html[data-theme="dark"] .form-card-title,
+    html[data-theme="dark"] .acc-title,
+    html[data-theme="dark"] .batch-sum-title,
+    html[data-theme="dark"] .grid-title,
+    html[data-theme="dark"] .demo-modal-title,
+    html[data-theme="dark"] .sum-num,
+    html[data-theme="dark"] .ocr-line,
+    html[data-theme="dark"] .acc-val {
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .demo-ghost-btn,
+    html[data-theme="dark"] .btn-secondary,
+    html[data-theme="dark"] .viewer-tool-btn,
+    html[data-theme="dark"] .demo-step {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.18);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .demo-ghost-btn:hover:not(:disabled),
+    html[data-theme="dark"] .btn-secondary:hover {
+        background: #2C2C2E;
+    }
+    html[data-theme="dark"] .demo-table th {
+        background: #242426;
+        color: #A1A1A6;
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .demo-table td {
+        border-color: rgba(235, 235, 245, 0.08);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .row-clickable:hover {
+        background: rgba(255, 255, 255, 0.06);
+    }
+    html[data-theme="dark"] .row-selected {
+        background: rgba(10, 132, 255, 0.18) !important;
+    }
+    html[data-theme="dark"] .form-input,
+    html[data-theme="dark"] .form-select,
+    html[data-theme="dark"] .demo-form-input {
+        background: #141416;
+        border-color: rgba(235, 235, 245, 0.2);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .table-container {
+        border-color: rgba(235, 235, 245, 0.15);
+        background: #1C1C1E;
+    }
+    html[data-theme="dark"] .form-input-ro,
+    html[data-theme="dark"] .demo-form-input:disabled {
+        background: #242426;
+        color: #A1A1A6;
+    }
+    html[data-theme="dark"] .micr-ocr-box,
+    html[data-theme="dark"] .cheque-canvas-container,
+    html[data-theme="dark"] .sum-box,
+    html[data-theme="dark"] .sig-box,
+    html[data-theme="dark"] .demo-modal-footer,
+    html[data-theme="dark"] .scanner-options-box,
+    html[data-theme="dark"] .confirmation-box,
+    html[data-theme="dark"] .checkbox-row,
+    html[data-theme="dark"] .checkbox-container {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .btn-primary-dark {
+        background: #0A84FF;
+        border-color: #0A84FF;
+        color: #FFFFFF;
+    }
+    html[data-theme="dark"] .img-tab-btn.active {
+        background: #0A84FF;
+        color: #FFFFFF;
+    }
+    html[data-theme="dark"] .demo-action-bar-bottom {
+        background: #1C1C1E;
+        border-color: rgba(235, 235, 245, 0.15);
+    }
+</style>
+
+@code {
+    // State Models
+    private class BatchModel
+    {
+        public string Id { get; set; } = "";
+        public string BatchNo { get; set; } = "";
+        public string BranchName { get; set; } = "Head Office";
+        public decimal TotalAmount { get; set; }
+        public int ItemCount { get; set; }
+    }
+
+    private class AccountModel
+    {
+        public string Id { get; set; } = "";
+        public string AccountNo { get; set; } = "";
+        public string CustomerName { get; set; } = "";
+        public string Status { get; set; } = "Active";
+        public string BranchName { get; set; } = "Head Office";
+    }
+
+    private class DraftCheque
+    {
+        public string Id { get; set; } = "";
+        public string ChequeNo { get; set; } = "";
+        public string AccountNo { get; set; } = "";
+        public string MicrAccountNo { get; set; } = "";
+        public string MicrRoutingNumber { get; set; } = "";
+        public string BankName { get; set; } = "";
+        public string ChequeType { get; set; } = "Current Dated Normal";
+        public string CheckDigit { get; set; } = "";
+        public string Amount { get; set; } = "";
+        public string ChequeDate { get; set; } = "";
+        public string DrawerName { get; set; } = "";
+        public string Remarks { get; set; } = "";
+        public bool Discard { get; set; }
+        public string Uic { get; set; } = "";
+        public bool AccountFetched { get; set; }
+        public AccountModel? Account { get; set; }
+        public List<string> ImageQualityFlags { get; set; } = new();
+        public string? FrontImageBase64 { get; set; }
+        public string? RearImageBase64 { get; set; }
+        public string? UvImageBase64 { get; set; }
+        public bool IsWaitingEjection { get; set; }
+    }
+
+    // Page state variables
+    private string _branchName = "Head Office";
+    private bool _infoCollapsed = true;
+    private string _imageTab = "Front B&W";
+    private double _zoomLevel = 1.0;
+    private int _rotation = 0;
+    private string _selectedScanner = "FB 30 U";
+    private string _selectedSavedBatch = "OUT-0601-01";
+    private string _batchAmountInput = "";
+    private string _message = "";
+    private string _success = "";
+    private List<string> _validationErrors = new();
+    private bool _isPaperWaitingInTrack = false;
+    private DraftCheque? _pausedCheque = null;
+
+    // Modals state
+    private bool _showNewBatchModal = false;
+    private int _newBatchStep = 1;
+    private bool _enableEndorsement = true;
+    private bool _showIqaModal = false;
+    private int? _iqaIndex = null;
+    private string _iqaDiscardRemarks = "";
+
+    // Data lists
+    private BatchModel? _currentBatch;
+    private List<DraftCheque> _drafts = new();
+    private int _selectedIndex = 0;
+
+    // Accounts repository
+    private List<AccountModel> _accounts = new()
+    {
+        new AccountModel { Id = "CUST-00124", AccountNo = "001000245117999", CustomerName = "Demo Trading Co.", Status = "Active", BranchName = "Head Office" },
+        new AccountModel { Id = "CUST-00125", AccountNo = "001000245118001", CustomerName = "Global Logistics Ltd", Status = "Active", BranchName = "Yangon Main" },
+        new AccountModel { Id = "CUST-00126", AccountNo = "001000245118002", CustomerName = "Myanmar Apex Corp", Status = "Active", BranchName = "Head Office" }
+    };
+
+    private readonly List<string> _allIqaReasons = new()
+    {
+        "Under Sized Image",
+        "Folded or Torn Corners",
+        "Folded or Torn Edges",
+        "Document Framing Error",
+        "Excessive Document Skew",
+        "Image Too Light",
+        "Image Too Dark",
+        "Excessive Spots",
+        "Image Out of Focus",
+        "Carbon Strip"
+    };
+
+    private DraftCheque? Selected => _isPaperWaitingInTrack && _pausedCheque != null 
+        ? _pausedCheque 
+        : _drafts.Count > _selectedIndex && _selectedIndex >= 0 ? _drafts[_selectedIndex] : null;
+
+    private string CurrentChequeImageUrl => GetChequeImageUrl(Selected, _imageTab);
+
+    private string GetChequeImageUrl(DraftCheque? cheque, string tab)
+    {
+        if (cheque == null)
+        {
+            return tab == "Rear B&W" ? "/placeholders/cheque-rear.svg" : "/placeholders/cheque-001.svg";
+        }
+
+        if (tab == "Rear B&W" && !string.IsNullOrEmpty(cheque.RearImageBase64))
+        {
+            return cheque.RearImageBase64;
+        }
+
+        if (tab == "Front UV" && !string.IsNullOrEmpty(cheque.UvImageBase64))
+        {
+            return cheque.UvImageBase64;
+        }
+
+        if ((tab == "Front B&W" || tab == "Front Gray") && !string.IsNullOrEmpty(cheque.FrontImageBase64))
+        {
+            return cheque.FrontImageBase64;
+        }
+
+        if (tab == "Rear B&W")
+        {
+            var rearSvg = $@"<svg xmlns=""http://www.w3.org/2000/svg"" width=""980"" height=""390"" viewBox=""0 0 980 390"">
+  <rect width=""980"" height=""390"" fill=""#f8fafc""/>
+  <rect x=""18"" y=""18"" width=""944"" height=""354"" rx=""4"" fill=""#ffffff"" stroke=""#94a3b8"" stroke-width=""3""/>
+  <line x1=""180"" y1=""18"" x2=""180"" y2=""372"" stroke=""#cbd5e1"" stroke-width=""2"" stroke-dasharray=""6,6"" />
+  <text x=""50"" y=""200"" font-family=""Arial"" font-size=""16"" fill=""#64748b"" transform=""rotate(-90 50,200)"">ENDORSE HERE</text>
+  <rect x=""220"" y=""40"" width=""700"" height=""120"" rx=""4"" fill=""#f1f5f9"" stroke=""#cbd5e1"" />
+  <text x=""240"" y=""80"" font-family=""monospace"" font-size=""18"" fill=""#1e293b"">{System.Security.SecurityElement.Escape(cheque.Uic ?? "")}</text>
+  <text x=""240"" y=""110"" font-family=""Arial"" font-size=""14"" fill=""#64748b"">PRESENTED: MM DEMO BANK - HEAD OFFICE</text>
+  <text x=""240"" y=""135"" font-family=""Arial"" font-size=""14"" fill=""#64748b"">DATE: {DateTime.Today:yyyy-MM-dd}</text>
+  <path d=""M400 260 C450 210, 500 310, 560 240 S650 250, 720 220"" fill=""none"" stroke=""#0f172a"" stroke-width=""3"" stroke-linecap=""round""/>
+  <text x=""400"" y=""320"" font-family=""Arial"" font-size=""14"" fill=""#94a3b8"">Authorized Payee Endorsement</text>
+</svg>";
+            return $"data:image/svg+xml;utf8,{Uri.EscapeDataString(rearSvg)}";
+        }
+
+        var tint = tab == "Front UV" ? "#e8fff3" : tab == "Front Gray" ? "#eeeeee" : "#ffffff";
+        var ink = tab == "Front UV" ? "#006b4f" : "#1f2937";
+        var payee = string.IsNullOrWhiteSpace(cheque.Account?.CustomerName) ? "Demo Trading Co." : cheque.Account.CustomerName;
+        var formattedAmt = decimal.TryParse(cheque.Amount, out var amt) ? amt.ToString("N0") : (string.IsNullOrWhiteSpace(cheque.Amount) ? "1,250,000" : cheque.Amount);
+        var micrLine = $"{cheque.ChequeNo} {cheque.MicrRoutingNumber} {cheque.MicrAccountNo} {cheque.CheckDigit}";
+
+        var frontSvg = $@"<svg xmlns=""http://www.w3.org/2000/svg"" width=""980"" height=""390"" viewBox=""0 0 980 390"">
+  <rect width=""980"" height=""390"" fill=""{tint}""/>
+  <rect x=""18"" y=""18"" width=""944"" height=""354"" rx=""4"" fill=""{tint}"" stroke=""#64748b"" stroke-width=""3""/>
+  <path d=""M18 86H962M18 302H962"" stroke=""#cbd5df"" stroke-width=""2""/>
+  <text x=""42"" y=""58"" font-family=""Arial"" font-size=""28"" font-weight=""700"" fill=""#126070"">MM Demo Bank</text>
+  <text x=""732"" y=""58"" font-family=""Arial"" font-size=""18"" fill=""#334155"">No. {System.Security.SecurityElement.Escape(cheque.ChequeNo ?? "")}</text>
+  <text x=""42"" y=""118"" font-family=""Arial"" font-size=""18"" fill=""#475569"">Pay to</text>
+  <rect x=""118"" y=""94"" width=""620"" height=""38"" fill=""#eef3f7"" stroke=""#a8bac8""/>
+  <text x=""132"" y=""120"" font-family=""Arial"" font-size=""20"" fill=""{ink}"">{System.Security.SecurityElement.Escape(payee)}</text>
+  <rect x=""772"" y=""94"" width=""148"" height=""38"" fill=""#eef3f7"" stroke=""#a8bac8""/>
+  <text x=""790"" y=""120"" font-family=""Arial"" font-size=""18"" font-weight=""700"" fill=""{ink}"">MMK {System.Security.SecurityElement.Escape(formattedAmt)}</text>
+  <path d=""M205 177 C250 140, 292 202, 338 164 S438 150, 500 178"" fill=""none"" stroke=""{ink}"" stroke-width=""4"" stroke-linecap=""round""/>
+  <text x=""42"" y=""230"" font-family=""Arial"" font-size=""16"" fill=""#475569"">A/C {System.Security.SecurityElement.Escape(cheque.AccountNo ?? "")} Yangon Main Branch</text>
+  <rect x=""702"" y=""226"" width=""212"" height=""54"" fill=""#fff"" stroke=""#a8bac8""/>
+  <path d=""M720 262 C748 232, 768 292, 804 250 S874 246, 896 230"" fill=""none"" stroke=""{ink}"" stroke-width=""4"" stroke-linecap=""round""/>
+  <text x=""680"" y=""322"" font-family=""monospace"" font-size=""22"" fill=""#111827"">{System.Security.SecurityElement.Escape(micrLine)}</text>
+</svg>";
+        return $"data:image/svg+xml;utf8,{Uri.EscapeDataString(frontSvg)}";
+    }
+
+    private decimal CalculatedAmount => _drafts.Where(d => !d.Discard && decimal.TryParse(d.Amount, out var a)).Sum(d => decimal.Parse(d.Amount));
+
+    private string ValidationStatus => _validationErrors.Count > 0 ? "Issues found" : _currentBatch != null && _drafts.Count > 0 ? "Ready for review" : "Waiting for capture";
+
+    protected override void OnInitialized()
+    {
+        // Default blank state matching initial load
+    }
+
+    private void ZoomIn() => _zoomLevel = Math.Min(1.5, Math.Round(_zoomLevel + 0.1, 2));
+    private void ZoomOut() => _zoomLevel = Math.Max(0.7, Math.Round(_zoomLevel - 0.1, 2));
+    private void RotateImage() => _rotation = (_rotation + 90) % 360;
+    private void ResetZoom() { _zoomLevel = 1.0; _rotation = 0; }
+
+    private void PrevCheque()
+    {
+        if (_selectedIndex > 0) _selectedIndex--;
+    }
+
+    private void NextCheque()
+    {
+        if (_selectedIndex < _drafts.Count - 1) _selectedIndex++;
+    }
+
+    private string Digits(string input) => new string(input.Where(char.IsDigit).ToArray());
+
+    private void OnAccountNoInput(ChangeEventArgs e)
+    {
+        if (Selected != null)
+        {
+            Selected.AccountNo = Digits(e.Value?.ToString() ?? "").PadRight(15).Substring(0, Math.Min(15, Digits(e.Value?.ToString() ?? "").Length));
+            Selected.AccountFetched = false;
+            _validationErrors.Clear();
+        }
+    }
+
+    private void UpdateSelectedField(string field, string value)
+    {
+        if (Selected == null) return;
+        switch (field)
+        {
+            case "ChequeNo": Selected.ChequeNo = value; break;
+            case "MicrAccountNo": Selected.MicrAccountNo = value; break;
+            case "MicrRoutingNumber": Selected.MicrRoutingNumber = value; break;
+            case "ChequeType": Selected.ChequeType = value; break;
+            case "CheckDigit": Selected.CheckDigit = value; break;
+            case "Amount": Selected.Amount = value; break;
+            case "ChequeDate": Selected.ChequeDate = value; break;
+            case "DrawerName": Selected.DrawerName = value; break;
+            case "Remarks": Selected.Remarks = value; break;
+        }
+        _validationErrors.Clear();
+    }
+
+    private void OnBatchAmountInput(ChangeEventArgs e)
+    {
+        _batchAmountInput = Digits(e.Value?.ToString() ?? "");
+        _validationErrors.Clear();
+    }
+
+    private void OnDiscardToggle(ChangeEventArgs e)
+    {
+        if (Selected != null)
+        {
+            Selected.Discard = (bool)(e.Value ?? false);
+            _validationErrors.Clear();
+        }
+    }
+
+    private void FetchAccount()
+    {
+        if (Selected == null) return;
+        var cleanAcc = Digits(Selected.AccountNo);
+        var match = _accounts.FirstOrDefault(a => a.AccountNo == cleanAcc) ?? _accounts.First();
+        
+        Selected.Account = match;
+        Selected.AccountNo = match.AccountNo;
+        Selected.MicrAccountNo = match.AccountNo;
+        Selected.AccountFetched = true;
+        _message = "";
+        StateHasChanged();
+    }
+
+    private void ConfirmCreateBatch()
+    {
+        var serial = DateTime.Now.ToString("HHmmss");
+        var batchNo = $"OUT-{DateTime.Today:MMdd}-01";
+        var id = $"BATCH-OUT-HO-{DateTime.Today:yyyyMMdd}-{serial}";
+
+        _currentBatch = new BatchModel
+        {
+            Id = id,
+            BatchNo = batchNo,
+            BranchName = _branchName,
+            ItemCount = 0,
+            TotalAmount = 0
+        };
+        _drafts.Clear();
+        _batchAmountInput = "0";
+        _showNewBatchModal = false;
+        _newBatchStep = 1;
+        _message = "";
+        _success = $"Batch {_currentBatch.BatchNo} created successfully.";
+    }
+
+    private async Task ScanSingleCheque()
+    {
+        if (_currentBatch == null)
+        {
+            ConfirmCreateBatch();
+        }
+
+        try
+        {
+            using var client = HttpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(15);
+
+            var req = new ScanOneRequest
+            {
+                BatchId = _currentBatch!.BatchNo,
+                BranchCode = "001",
+                LowSpeedMode = false,
+                EnableUv = true,
+                ResolutionDpi = 200
+            };
+
+            var httpResp = await client.PostAsJsonAsync("http://localhost:18080/api/scanner/feed-single", req);
+            if (httpResp.IsSuccessStatusCode)
+            {
+                var scanResult = await httpResp.Content.ReadFromJsonAsync<Result<ScanOneResponse>>();
+                if (scanResult != null && scanResult.IsSuccess && scanResult.Data?.Cheque != null)
+                {
+                    var sc = scanResult.Data.Cheque;
+                    var seq = _drafts.Count + 1;
+                    var acc = _accounts[(seq - 1) % _accounts.Count];
+
+                    _pausedCheque = new DraftCheque
+                    {
+                        Id = $"SCAN-{_currentBatch!.BatchNo}-{seq}",
+                        ChequeNo = sc.ChequeNumber,
+                        AccountNo = acc.AccountNo,
+                        MicrAccountNo = sc.MicrAccount,
+                        MicrRoutingNumber = sc.RoutingNumber,
+                        BankName = "Kanbawza Bank (KBZ)",
+                        ChequeType = "Current Dated Normal",
+                        CheckDigit = sc.CheckDigit,
+                        Amount = "1500000",
+                        ChequeDate = DateTime.Today.ToString("yyyy-MM-dd"),
+                        DrawerName = $"Drawer {seq}",
+                        Remarks = "",
+                        Discard = false,
+                        Uic = $"UIC{DateTime.Today:yyyyMMdd}HOFB30U{seq:D4}",
+                        AccountFetched = true,
+                        Account = acc,
+                        FrontImageBase64 = sc.FrontImageBase64,
+                        RearImageBase64 = sc.RearImageBase64,
+                        UvImageBase64 = sc.UvImageBase64,
+                        IsWaitingEjection = true,
+                        ImageQualityFlags = sc.IqaPassed ? new List<string>() : new List<string> { sc.IqaDetails ?? "IQA Warning" }
+                    };
+
+                    _isPaperWaitingInTrack = true;
+                    _message = "Cheque fed and scanned. Paper paused in track waiting for ejection decision.";
+                    _success = $"Cheque No. {sc.ChequeNumber} captured in track ({scanResult.Data.Mode}). Please choose Eject action.";
+                    _validationErrors.Clear();
+                    StateHasChanged();
+                    return;
+                }
+                else if (scanResult != null && scanResult.IsFailure)
+                {
+                    _message = scanResult.Message ?? "Scanner hardware error occurred.";
+                    _validationErrors.Clear();
+                    _validationErrors.Add($"Scanner Alert: {_message}");
+                    StateHasChanged();
+                    return;
+                }
+            }
+        }
+        catch
+        {
+            // Fallback standalone simulation
+        }
+
+        ScanSingleChequeFallback();
+    }
+
+    private void ScanSingleChequeFallback()
+    {
+        var seq = _drafts.Count + 1;
+        var acc = _accounts[(seq - 1) % _accounts.Count];
+        var sampleCheques = new[] { "900421", "900422", "900423" };
+
+        _pausedCheque = new DraftCheque
+        {
+            Id = $"SCAN-{_currentBatch!.BatchNo}-{seq}",
+            ChequeNo = sampleCheques[(seq - 1) % sampleCheques.Length],
+            AccountNo = acc.AccountNo,
+            MicrAccountNo = acc.AccountNo,
+            MicrRoutingNumber = "100001001",
+            BankName = "Kanbawza Bank (KBZ)",
+            ChequeType = "Current Dated Normal",
+            CheckDigit = "0",
+            Amount = "1250000",
+            ChequeDate = DateTime.Today.ToString("yyyy-MM-dd"),
+            DrawerName = $"Demo Drawer {seq}",
+            Remarks = "",
+            Discard = false,
+            Uic = $"UIC{DateTime.Today:yyyyMMdd}HOFB30U{seq:D4}",
+            AccountFetched = true,
+            Account = acc,
+            IsWaitingEjection = true,
+            ImageQualityFlags = new List<string>()
+        };
+
+        _isPaperWaitingInTrack = true;
+        _message = "Cheque fed and scanned. Paper paused in track waiting for ejection decision.";
+        _success = $"Cheque No. {_pausedCheque.ChequeNo} captured in track (Offline Standby).";
+        _validationErrors.Clear();
+    }
+
+    private async Task EjectAndPrint() => await EjectCurrentCheque(true);
+    private async Task EjectWithoutPrint() => await EjectCurrentCheque(false);
+
+    private async Task EjectCurrentCheque(bool print)
+    {
+        if (_pausedCheque == null) return;
+
+        try
+        {
+            using var client = HttpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(15);
+
+            var req = new EjectChequeRequest
+            {
+                Pocket = 1,
+                PrintEndorsement = print,
+                CustomEndorsementText = $"ACE CTS * BR001 * {DateTime.Today:yyyyMMdd} * UIC:{_pausedCheque.Uic}"
+            };
+
+            var httpResp = await client.PostAsJsonAsync("http://localhost:18080/api/scanner/eject", req);
+            if (httpResp.IsSuccessStatusCode)
+            {
+                var ejectResult = await httpResp.Content.ReadFromJsonAsync<Result<EjectChequeResponse>>();
+                if (ejectResult != null && ejectResult.IsFailure)
+                {
+                    _validationErrors.Clear();
+                    _validationErrors.Add($"Eject Alert: {ejectResult.Message}");
+                    StateHasChanged();
+                    return;
+                }
+            }
+        }
+        catch
+        {
+            // Offline fallback proceeds with local state
+        }
+
+        _pausedCheque.IsWaitingEjection = false;
+        _drafts.Add(_pausedCheque);
+        _isPaperWaitingInTrack = false;
+        _selectedIndex = _drafts.Count - 1;
+        _batchAmountInput = CalculatedAmount.ToString("0");
+        _message = "";
+        _success = print 
+            ? $"Cheque {_pausedCheque.ChequeNo} endorsed and discharged into Pocket 1."
+            : $"Cheque {_pausedCheque.ChequeNo} discharged into Pocket 1 without endorsement.";
+        _pausedCheque = null;
+        _validationErrors.Clear();
+        StateHasChanged();
+    }
+
+    private void OpenSavedBatch()
+    {
+        _currentBatch = new BatchModel
+        {
+            Id = $"BATCH-OUT-HO-{DateTime.Today:yyyyMMdd}-001",
+            BatchNo = _selectedSavedBatch,
+            BranchName = _branchName,
+            ItemCount = 2,
+            TotalAmount = 1495500
+        };
+
+        _drafts = new List<DraftCheque>
+        {
+            new DraftCheque
+            {
+                Id = $"SCAN-{_currentBatch.BatchNo}-1",
+                ChequeNo = "900421",
+                AccountNo = "001000245117999",
+                MicrAccountNo = "001000245117999",
+                MicrRoutingNumber = "200101",
+                BankName = "Demo Paying Bank 1",
+                ChequeType = "Current Dated Normal",
+                CheckDigit = "1",
+                Amount = "1250000",
+                ChequeDate = DateTime.Today.ToString("yyyy-MM-dd"),
+                DrawerName = "Demo Drawer 1",
+                Uic = $"UIC{DateTime.Today:yyyyMMdd}HOFB30U0001",
+                AccountFetched = true,
+                Account = _accounts[0]
+            },
+            new DraftCheque
+            {
+                Id = $"SCAN-{_currentBatch.BatchNo}-2",
+                ChequeNo = "900422",
+                AccountNo = "001000245118001",
+                MicrAccountNo = "001000245118001",
+                MicrRoutingNumber = "200102",
+                BankName = "Demo Paying Bank 2",
+                ChequeType = "Current Dated Normal",
+                CheckDigit = "2",
+                Amount = "245500",
+                ChequeDate = DateTime.Today.ToString("yyyy-MM-dd"),
+                DrawerName = "Demo Drawer 2",
+                Uic = $"UIC{DateTime.Today:yyyyMMdd}HOFB30U0002",
+                AccountFetched = true,
+                Account = _accounts[1]
+            }
+        };
+
+        _selectedIndex = 0;
+        _batchAmountInput = CalculatedAmount.ToString("0");
+        _message = "";
+        _success = $"Opened saved batch {_currentBatch.BatchNo}.";
+        _validationErrors.Clear();
+    }
+
+    private void OnSavedBatchChange(ChangeEventArgs e)
+    {
+        _selectedSavedBatch = e.Value?.ToString() ?? "OUT-0601-01";
+        OpenSavedBatch();
+    }
+
+    private void SaveDraft()
+    {
+        if (_currentBatch == null)
+        {
+            _message = "No batch is currently open.";
+            return;
+        }
+        _success = $"Batch {_currentBatch.BatchNo} draft saved successfully.";
+        _message = "";
+    }
+
+    private void SubmitBatch()
+    {
+        _validationErrors.Clear();
+        if (_currentBatch == null)
+        {
+            _validationErrors.Add("Create or open a batch first.");
+            return;
+        }
+        if (_drafts.Count == 0)
+        {
+            _validationErrors.Add("Scan at least one cheque.");
+            return;
+        }
+
+        foreach (var item in _drafts)
+        {
+            if (!item.AccountFetched)
+                _validationErrors.Add($"Cheque {item.ChequeNo}: credit account must be fetched.");
+            if (string.IsNullOrEmpty(item.Amount) || item.Amount == "0")
+                _validationErrors.Add($"Cheque {item.ChequeNo}: cheque amount is required.");
+        }
+
+        if (decimal.TryParse(_batchAmountInput, out var enteredAmt))
+        {
+            if (enteredAmt != CalculatedAmount)
+            {
+                _validationErrors.Add($"Batch amount ({enteredAmt:N0}) must equal calculated amount ({CalculatedAmount:N0}).");
+            }
+        }
+        else
+        {
+            _validationErrors.Add("Valid batch amount is required.");
+        }
+
+        if (_validationErrors.Count > 0)
+        {
+            return;
+        }
+
+        // Check for IQA exceptions
+        var iqaIndex = _drafts.FindIndex(d => !d.Discard && d.ImageQualityFlags.Count > 0);
+        if (iqaIndex >= 0)
+        {
+            _iqaIndex = iqaIndex;
+            _iqaDiscardRemarks = "";
+            _showIqaModal = true;
+            return;
+        }
+
+        _success = $"Batch {_currentBatch.Id} validated and submitted to Outward Authorization successfully.";
+        _message = "";
+    }
+
+    private void DiscardBatch()
+    {
+        if (_currentBatch == null) return;
+        foreach (var d in _drafts)
+        {
+            d.Discard = true;
+            d.Remarks = string.IsNullOrEmpty(d.Remarks) ? "Discarded by maker" : d.Remarks;
+        }
+        _success = $"Batch {_currentBatch.BatchNo} marked as discarded.";
+    }
+
+    private void ExitScanning()
+    {
+        Navigation.NavigateTo("/outward/dashboard");
+    }
+
+    // IQA review handlers
+    private void ToggleIqaFlag(DraftCheque cheque, string reason)
+    {
+        if (cheque.ImageQualityFlags.Contains(reason))
+            cheque.ImageQualityFlags.Remove(reason);
+        else
+            cheque.ImageQualityFlags.Add(reason);
+    }
+
+    private void IqaRescan()
+    {
+        if (_iqaIndex.HasValue && _drafts.Count > _iqaIndex.Value)
+        {
+            _drafts[_iqaIndex.Value].ImageQualityFlags.Clear();
+            _showIqaModal = false;
+            _success = "Cheque rescanned and IQA cleared. Click Submit Batch to proceed.";
+        }
+    }
+
+    private void IqaAccept()
+    {
+        if (_iqaIndex.HasValue && _drafts.Count > _iqaIndex.Value)
+        {
+            _drafts[_iqaIndex.Value].ImageQualityFlags.Clear();
+            _showIqaModal = false;
+            _success = "Image quality accepted by maker. Click Submit Batch to complete.";
+        }
+    }
+
+    private void IqaDiscard()
+    {
+        if (string.IsNullOrWhiteSpace(_iqaDiscardRemarks))
+        {
+            _message = "Remarks are required when discarding an IQA cheque.";
+            return;
+        }
+        if (_iqaIndex.HasValue && _drafts.Count > _iqaIndex.Value)
+        {
+            _drafts[_iqaIndex.Value].Discard = true;
+            _drafts[_iqaIndex.Value].Remarks = _iqaDiscardRemarks;
+            _drafts[_iqaIndex.Value].ImageQualityFlags.Clear();
+            _showIqaModal = false;
+            _success = "Flagged cheque discarded.";
+        }
+    }
+}

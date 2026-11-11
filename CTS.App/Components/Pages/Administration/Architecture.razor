@@ -1,0 +1,14 @@
+@page "/architecture"
+@attribute [Authorize(Policy = PermissionCatalog.AdminArchitectureViewPolicy)]
+
+<PageTitle>System Architecture · ACE CTS</PageTitle>
+<PageHeader Section="Administration" Title="CTS System Architecture" Subtitle="Runtime view of the API-backed Blazor solution and clearing integrations." Badge="Live design" />
+
+<section class="architecture-canvas panel">
+    <div class="architecture-zone clients"><span class="zone-label">CLIENT & PRESENTATION</span><div class="node featured"><i>UI</i><strong>CTS Blazor Web App</strong><small>Protected cookie · Interactive Server · Typed feature clients</small></div><div class="node"><i>OPS</i><strong>Maker / Checker / Admin</strong><small>Role-scoped route and action access</small></div></div>
+    <div class="connector down"><span>HTTPS · Result&lt;T&gt;</span></div>
+    <div class="architecture-zone services"><span class="zone-label">APPLICATION & API</span><div class="node featured"><i>API</i><strong>ASP.NET Core API</strong><small>JWT bearer · endpoint request/response contracts</small></div><div class="node"><i>AUTH</i><strong>Authentication Feature</strong><small>BCrypt · session validation · role claims</small></div><div class="node"><i>WF</i><strong>Workspace Feature</strong><small>Dashboard · queues · transitions · reports</small></div><div class="node"><i>ADM</i><strong>Administration Feature</strong><small>Users · settings · archive · audit</small></div></div>
+    <div class="connector down"><span>Domain services</span></div>
+    <div class="architecture-zone data"><span class="zone-label">DATA & INTEGRATION</span><div class="node"><i>DB</i><strong>SQL Server / Demo Store</strong><small>Production persistence with API-hosted demo fallback</small></div><div class="node"><i>ICL</i><strong>Clearing House</strong><small>Forward and return ICL exchange</small></div><div class="node"><i>CBS</i><strong>Core Banking</strong><small>Debit, credit and charge posting files</small></div><div class="node"><i>OBS</i><strong>Audit & Diagnostics</strong><small>Correlation IDs and structured request events</small></div></div>
+</section>
+<section class="architecture-notes"><article><strong>One request, one response</strong><p>Each operation uses a typed contract and one API action.</p></article><article><strong>Feature-based boundaries</strong><p>Authentication, workspace and administration own their services and contracts.</p></article><article><strong>Server-protected identity</strong><p>The browser stores no raw JWT in local or session storage.</p></article></section>

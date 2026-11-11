@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review — cheque-truncation-system-cts</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: "neutral",
+        securityLevel: "loose",
+        flowchart: { curve: "basis", htmlLabels: true }
+      });
+    </script>
+    <style>
+      :root { color-scheme: light; }
+      html { scroll-behavior: smooth; }
+      body {
+        background:
+          radial-gradient(circle at 8% 0%, rgba(16, 185, 129, .10), transparent 26rem),
+          radial-gradient(circle at 92% 10%, rgba(79, 70, 229, .09), transparent 28rem),
+          #fafaf9;
+      }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .seam { border-style: dashed; }
+      .leak { color: #dc2626; border-color: #fecaca; background: #fff7f7; }
+      .diagram-grid { min-height: 316px; }
+      .mass-interface { height: 42%; }
+      .mass-implementation { height: 58%; }
+      .mass-interface-deep { height: 18%; }
+      .mass-implementation-deep { height: 82%; }
+      .file-list code { overflow-wrap: anywhere; }
+      .mermaid { display: flex; justify-content: center; min-height: 240px; align-items: center; }
+      .arrow { color: #94a3b8; font-size: 1.4rem; line-height: 1; }
+      @media print {
+        body { background: white; }
+        article { break-inside: avoid; }
+      }
+    </style>
+  </head>
+  <body class="text-slate-900 font-sans antialiased">
+    <main class="max-w-6xl mx-auto px-5 py-12 space-y-12">
+      <header class="border-b border-slate-300 pb-8">
+        <div class="flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-emerald-700 font-semibold">Architecture review</p>
+            <h1 class="mt-2 text-4xl md:text-5xl font-serif tracking-tight">cheque-truncation-system-cts</h1>
+          </div>
+          <div class="text-right text-sm text-slate-500">
+            <p>17 August 2026</p>
+            <p>Scope: recent RBAC, session, and workflow hot spots</p>
+          </div>
+        </div>
+        <div class="mt-7 flex flex-wrap gap-x-6 gap-y-3 text-xs text-slate-600">
+          <span class="inline-flex items-center gap-2"><i class="w-6 h-4 border-2 border-slate-500 bg-white rounded-sm"></i>module</span>
+          <span class="inline-flex items-center gap-2"><i class="w-6 h-4 border-2 border-dashed border-slate-500 bg-white rounded-sm"></i>seam</span>
+          <span class="inline-flex items-center gap-2"><i class="w-7 h-0.5 bg-red-600"></i>leakage</span>
+          <span class="inline-flex items-center gap-2"><i class="w-6 h-4 bg-slate-900 rounded-sm"></i>deep module</span>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-12">
+        <article id="workflow-authority" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="p-7 md:p-9">
+            <div class="flex flex-wrap justify-between gap-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Candidate 01</p>
+                <h2 class="mt-2 text-3xl font-serif">One authoritative clearing-workflow module</h2>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Strong</span>
+                <span class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-800">in-process</span>
+              </div>
+            </div>
+
+            <div class="file-list mt-6 grid md:grid-cols-2 gap-x-8 gap-y-1 text-sm text-slate-600 font-mono">
+              <code>WorkflowCatalog.cs:5–78</code>
+              <code>PermissionCatalog.cs:49–172</code>
+              <code>WorkflowPresentation.cs:16–79</code>
+              <code>WorkflowWorkspace.razor:33–86, 217–370</code>
+              <code>WorkflowCatalogTests.cs:7–90</code>
+              <code>NavMenu.razor:1–39</code>
+            </div>
+
+            <div class="diagram-grid mt-8 grid lg:grid-cols-2 gap-6">
+              <div class="rounded-xl border border-red-200 bg-red-50/40 p-4">
+                <p class="text-xs uppercase tracking-wider font-semibold text-red-700">Before · knowledge leaks</p>
+                <pre class="mermaid">
+flowchart TB
+  C[Change one workstep]
+  C -->|identity + actions| W[WorkflowCatalog]
+  C -->|permissions + routes| P[PermissionCatalog]
+  C -->|copy + display rules| U[WorkflowPresentations]
+  C -->|switches + special cases| R[Razor]
+  C -->|copied graph| T[Tests]
+  classDef leak fill:#fff7f7,stroke:#dc2626,stroke-width:2px,color:#7f1d1d;
+  class W,P,U,R,T leak;
+                </pre>
+              </div>
+              <div class="rounded-xl border border-slate-800 bg-slate-950 p-4 text-white">
+                <p class="text-xs uppercase tracking-wider font-semibold text-emerald-300">After · one deep module</p>
+                <pre class="mermaid">
+flowchart TB
+  D[Deep clearing-workflow module]
+  D --> A[authorization + execution]
+  D --> B[dashboard + routing]
+  D --> C[presentation metadata]
+  D --> T[graph consistency tests]
+  classDef deep fill:#0f172a,stroke:#34d399,stroke-width:3px,color:#fff;
+  classDef caller fill:#f8fafc,stroke:#94a3b8,color:#0f172a;
+  class D deep;
+  class A,B,C,T caller;
+                </pre>
+              </div>
+            </div>
+
+            <div class="mt-8 grid md:grid-cols-3 gap-6 text-sm">
+              <div><h3 class="font-semibold">Problem</h3><p class="mt-1 text-slate-600">Workstep identity, transitions, permissions, and presentation live in parallel modules with conflicting unknown-workstep behavior.</p></div>
+              <div><h3 class="font-semibold">Solution</h3><p class="mt-1 text-slate-600">Deepen the cluster into one authoritative workflow module; attach client-only copy to authoritative workflow facts.</p></div>
+              <div><h3 class="font-semibold">Benefits</h3><ul class="mt-1 text-slate-600 space-y-1"><li>Locality: one workflow source</li><li>Leverage: every caller benefits</li><li>Tests hit one interface</li></ul></div>
+            </div>
+            <div class="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+              Drift already changes behavior: the domain fabricates a fallback, permissions fall back to search access, and presentation throws.
+            </div>
+          </div>
+        </article>
+
+        <article id="atomic-transition" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="p-7 md:p-9">
+            <div class="flex flex-wrap justify-between gap-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Candidate 02</p>
+                <h2 class="mt-2 text-3xl font-serif">Make work-item transitions atomic</h2>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Worth exploring</span>
+                <span class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-800">in-process</span>
+              </div>
+            </div>
+
+            <div class="file-list mt-6 grid md:grid-cols-2 gap-x-8 gap-y-1 text-sm text-slate-600 font-mono">
+              <code>DemoCtsStore.cs:60–66, 87–119</code>
+              <code>DemoCtsStore.cs:148–163</code>
+              <code>WorkspaceService.cs:100–123</code>
+              <code>WorkflowCatalogTests.cs:40–69</code>
+              <code>WorkspaceServiceAuthorizationTests.cs</code>
+            </div>
+
+            <div class="diagram-grid mt-8 grid lg:grid-cols-2 gap-6">
+              <div class="rounded-xl border border-red-200 bg-red-50/40 p-5">
+                <p class="text-xs uppercase tracking-wider font-semibold text-red-700">Before · mutable state crosses the seam</p>
+                <div class="mt-7 space-y-3 text-sm">
+                  <div class="rounded-lg border-2 border-slate-400 bg-white p-3">Workspace module: lookup → permission → action validation</div>
+                  <div class="text-center text-red-600 font-semibold">↓ mutable cheque reference escapes lock</div>
+                  <div class="rounded-lg border-2 border-red-400 bg-white p-3">Store module: re-lock → resolve → mutate → audit</div>
+                  <div class="grid grid-cols-3 gap-2 text-center text-xs text-red-800">
+                    <span class="rounded border border-red-200 p-2">state can change</span>
+                    <span class="rounded border border-red-200 p-2">rules split</span>
+                    <span class="rounded border border-red-200 p-2">tests split</span>
+                  </div>
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-800 bg-slate-950 p-5 text-white">
+                <p class="text-xs uppercase tracking-wider font-semibold text-emerald-300">After · one atomic implementation</p>
+                <div class="mt-7 rounded-xl border-4 border-emerald-400 bg-slate-900 p-5">
+                  <p class="text-xs uppercase tracking-wider text-emerald-300">Deep work-item transition module</p>
+                  <div class="mt-4 grid grid-cols-2 gap-2 text-center text-xs">
+                    <span class="rounded bg-slate-800 p-3">lookup + expected state</span>
+                    <span class="rounded bg-slate-800 p-3">permission + action</span>
+                    <span class="rounded bg-slate-800 p-3">transition + status</span>
+                    <span class="rounded bg-slate-800 p-3">audit + snapshot</span>
+                  </div>
+                </div>
+                <p class="mt-4 text-center text-sm text-slate-300">One seam · one observable outcome</p>
+              </div>
+            </div>
+
+            <div class="mt-8 grid md:grid-cols-3 gap-6 text-sm">
+              <div><h3 class="font-semibold">Problem</h3><p class="mt-1 text-slate-600">Lookup, validation, transition, mutation, and audit span two modules while a mutable cheque crosses their seam.</p></div>
+              <div><h3 class="font-semibold">Solution</h3><p class="mt-1 text-slate-600">Deepen runtime transition behavior into one atomic module that returns a snapshot instead of exposing mutable implementation state.</p></div>
+              <div><h3 class="font-semibold">Benefits</h3><ul class="mt-1 text-slate-600 space-y-1"><li>Locality: invariants stay together</li><li>Leverage: every action benefits</li><li>Tests observe one outcome</li></ul></div>
+            </div>
+          </div>
+        </article>
+
+        <article id="rbac-matrix" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="p-7 md:p-9">
+            <div class="flex flex-wrap justify-between gap-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Candidate 03</p>
+                <h2 class="mt-2 text-3xl font-serif">Deepen RBAC around one matrix mutation</h2>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Strong</span>
+                <span class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-800">local-substitutable</span>
+              </div>
+            </div>
+
+            <div class="file-list mt-6 grid md:grid-cols-2 gap-x-8 gap-y-1 text-sm text-slate-600 font-mono">
+              <code>RoleAndPermissionService.cs:10–120</code>
+              <code>RoleAndPermissionModels.cs:3–12</code>
+              <code>RoleAndPermissionController.cs:18–26</code>
+              <code>RoleAndPermissionClient.cs:11–15</code>
+              <code>RolePermissions.razor:218–286</code>
+              <code>RolePermissionsInteractionTests.cs:98–121</code>
+            </div>
+
+            <div class="diagram-grid mt-8 grid lg:grid-cols-2 gap-6">
+              <div class="rounded-xl border border-red-200 bg-red-50/40 p-5">
+                <p class="text-xs uppercase tracking-wider font-semibold text-red-700">Before · wide, overlapping interface</p>
+                <div class="mt-6 h-60 grid grid-cols-3 gap-3 items-stretch text-center text-xs">
+                  <div class="rounded-lg border-2 border-red-300 bg-white flex flex-col overflow-hidden">
+                    <div class="mass-interface p-3 bg-red-100 font-semibold">UI knows required-admin rule</div>
+                    <div class="mass-implementation p-3 flex items-center">selection state</div>
+                  </div>
+                  <div class="rounded-lg border-2 border-red-300 bg-white flex flex-col overflow-hidden">
+                    <div class="mass-interface p-3 bg-red-100 font-semibold">single update</div>
+                    <div class="mass-implementation p-3 flex items-center">duplicate validation</div>
+                  </div>
+                  <div class="rounded-lg border-2 border-red-300 bg-white flex flex-col overflow-hidden">
+                    <div class="mass-interface p-3 bg-red-100 font-semibold">matrix update</div>
+                    <div class="mass-implementation p-3 flex items-center">duplicate invariant + persistence</div>
+                  </div>
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-800 bg-slate-950 p-5 text-white">
+                <p class="text-xs uppercase tracking-wider font-semibold text-emerald-300">After · smaller interface, deeper implementation</p>
+                <div class="mt-6 h-60 max-w-md mx-auto rounded-xl border-4 border-emerald-400 flex flex-col overflow-hidden">
+                  <div class="mass-interface-deep bg-emerald-400 text-slate-950 p-3 text-center text-xs font-bold">RBAC matrix interface</div>
+                  <div class="mass-implementation-deep p-5 flex items-center justify-center">
+                    <div class="grid grid-cols-2 gap-3 text-xs text-center w-full">
+                      <span class="rounded bg-slate-800 p-3">role lookup</span>
+                      <span class="rounded bg-slate-800 p-3">code validation</span>
+                      <span class="rounded bg-slate-800 p-3">required assignments</span>
+                      <span class="rounded bg-slate-800 p-3">change application</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-8 grid md:grid-cols-3 gap-6 text-sm">
+              <div><h3 class="font-semibold">Problem</h3><p class="mt-1 text-slate-600">An unused single-role path duplicates matrix validation, while the required administrator assignment leaks into Razor.</p></div>
+              <div><h3 class="font-semibold">Solution</h3><p class="mt-1 text-slate-600">Make matrix management the deep RBAC module and absorb required assignments, validation, and persistence into its implementation.</p></div>
+              <div><h3 class="font-semibold">Benefits</h3><ul class="mt-1 text-slate-600 space-y-1"><li>Interface shrinks</li><li>Locality: policy changes once</li><li>Tests use local database</li></ul></div>
+            </div>
+            <div class="mt-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              Deletion test: removing the unused single-role path makes complexity vanish; removing the matrix implementation spreads it across callers.
+            </div>
+          </div>
+        </article>
+
+        <article id="server-session" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="p-7 md:p-9">
+            <div class="flex flex-wrap justify-between gap-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Candidate 04</p>
+                <h2 class="mt-2 text-3xl font-serif">Create server-side session authority</h2>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Strong</span>
+                <span class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-800">local-substitutable</span>
+              </div>
+            </div>
+
+            <div class="file-list mt-6 grid md:grid-cols-2 gap-x-8 gap-y-1 text-sm text-slate-600 font-mono">
+              <code>AuthenticationService.cs:44–59, 97–102</code>
+              <code>CTS.Api/Program.cs:47–56</code>
+              <code>DemoCtsStore.cs:7–14, 93–106</code>
+              <code>FeatureManager.cs:35</code>
+              <code>TokenIssuer.cs:24–51</code>
+              <code>DynamicRbacEndpointTests.cs:91–104</code>
+            </div>
+
+            <div class="diagram-grid mt-8 grid lg:grid-cols-2 gap-6">
+              <div class="rounded-xl border border-red-200 bg-red-50/40 p-4">
+                <p class="text-xs uppercase tracking-wider font-semibold text-red-700">Before · session truth is scattered</p>
+                <pre class="mermaid">
+flowchart TB
+  L[Login] -->|creates id| S[DemoCtsStore]
+  L -->|separate expiry| T[TokenIssuer]
+  M[Bearer middleware] -->|concrete lookup| S
+  O[Logout] -->|revokes id| S
+  S --- X[cheques + reports + settings]
+  classDef leak fill:#fff7f7,stroke:#dc2626,stroke-width:2px,color:#7f1d1d;
+  class S,T,M leak;
+                </pre>
+              </div>
+              <div class="rounded-xl border border-slate-800 bg-slate-950 p-4 text-white">
+                <p class="text-xs uppercase tracking-wider font-semibold text-emerald-300">After · one session module</p>
+                <pre class="mermaid">
+flowchart TB
+  A[Deep session authority]
+  L[Login] --> A
+  V[Bearer validation] --> A
+  O[Logout] --> A
+  A --> P[durable adapter]
+  A --> I[in-memory test adapter]
+  classDef deep fill:#0f172a,stroke:#34d399,stroke-width:3px,color:#fff;
+  classDef adapter fill:#f8fafc,stroke:#94a3b8,color:#0f172a,stroke-dasharray:5 5;
+  class A deep;
+  class P,I adapter;
+                </pre>
+              </div>
+            </div>
+
+            <div class="mt-8 grid md:grid-cols-3 gap-6 text-sm">
+              <div><h3 class="font-semibold">Problem</h3><p class="mt-1 text-slate-600">Issue, validate, expire, and revoke behavior is split; the active-session set tracks no expiry and sits inside unrelated demo state.</p></div>
+              <div><h3 class="font-semibold">Solution</h3><p class="mt-1 text-slate-600">Deepen session authority so token and session rules share one implementation and durable mechanics remain behind a seam.</p></div>
+              <div><h3 class="font-semibold">Benefits</h3><ul class="mt-1 text-slate-600 space-y-1"><li>Locality: security rules together</li><li>Leverage: every request validates</li><li>Tests cover expiry + restart</li></ul></div>
+            </div>
+          </div>
+        </article>
+
+        <article id="client-session" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="p-7 md:p-9">
+            <div class="flex flex-wrap justify-between gap-4">
+              <div>
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Candidate 05</p>
+                <h2 class="mt-2 text-3xl font-serif">Deepen client session orchestration</h2>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Worth exploring</span>
+                <span class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-800">ports &amp; adapters</span>
+              </div>
+            </div>
+
+            <div class="file-list mt-6 grid md:grid-cols-2 gap-x-8 gap-y-1 text-sm text-slate-600 font-mono">
+              <code>ApiTransport.cs:18–75</code>
+              <code>Login.razor:59–76</code>
+              <code>CTS.App/Program.cs:78–98</code>
+              <code>AuthenticationClient.cs:6–15</code>
+              <code>WorkspaceClient.cs:6–14</code>
+              <code>AuthenticationFlowTests.cs:35–44</code>
+            </div>
+
+            <div class="diagram-grid mt-8 grid lg:grid-cols-2 gap-6">
+              <div class="rounded-xl border border-red-200 bg-red-50/40 p-4">
+                <p class="text-xs uppercase tracking-wider font-semibold text-red-700">Before · orchestration in callers</p>
+                <pre class="mermaid">
+flowchart LR
+  P[Login Razor] -->|claims + cookie + route| C[Cookie]
+  T[ApiTransport] -->|JWT + expiry redirect| H[HTTP]
+  E[Host endpoints] -->|logout + cookie clear| H
+  F[Thin feature clients] -->|endpoint strings| T
+  classDef leak fill:#fff7f7,stroke:#dc2626,stroke-width:2px,color:#7f1d1d;
+  class P,T,E,F leak;
+                </pre>
+              </div>
+              <div class="rounded-xl border border-slate-800 bg-slate-950 p-4 text-white">
+                <p class="text-xs uppercase tracking-wider font-semibold text-emerald-300">After · session behavior behind one seam</p>
+                <pre class="mermaid">
+flowchart LR
+  U[Pages + feature callers] --> D[Deep client session module]
+  D --> H[HTTP adapter]
+  D --> I[in-memory test adapter]
+  D --> C[cookie identity]
+  classDef deep fill:#0f172a,stroke:#34d399,stroke-width:3px,color:#fff;
+  classDef adapter fill:#f8fafc,stroke:#94a3b8,color:#0f172a,stroke-dasharray:5 5;
+  class D deep;
+  class H,I adapter;
+                </pre>
+              </div>
+            </div>
+
+            <div class="mt-8 grid md:grid-cols-3 gap-6 text-sm">
+              <div><h3 class="font-semibold">Problem</h3><p class="mt-1 text-slate-600">Login projection, token transport, expiry cleanup, logout, and navigation outcomes sit in separate callers around an already-deep transport module.</p></div>
+              <div><h3 class="font-semibold">Solution</h3><p class="mt-1 text-slate-600">Deepen client session behavior while preserving HTTP and in-memory adapters at the owned-server seam.</p></div>
+              <div><h3 class="font-semibold">Benefits</h3><ul class="mt-1 text-slate-600 space-y-1"><li>Locality: cookie + JWT behavior</li><li>Leverage: all authenticated calls</li><li>Behavioral tests replace scans</li></ul></div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="top-recommendation" class="rounded-2xl deep p-8 md:p-10 text-white shadow-xl">
+        <p class="text-xs uppercase tracking-[0.2em] text-emerald-300 font-semibold">Top recommendation</p>
+        <h2 class="mt-3 text-3xl md:text-4xl font-serif">One authoritative clearing-workflow module</h2>
+        <p class="mt-4 max-w-3xl text-slate-300">It gives the broadest leverage: one workstep change currently crosses execution, authorization, routing, presentation, and copied tests.</p>
+        <a href="#workflow-authority" class="mt-6 inline-flex rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300">Review candidate 01 ↑</a>
+      </section>
+    </main>
+  </body>
+</html>

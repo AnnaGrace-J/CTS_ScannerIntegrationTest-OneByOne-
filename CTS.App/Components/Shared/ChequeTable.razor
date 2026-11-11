@@ -1,0 +1,31 @@
+<div class="table-shell">
+    <table class="data-table">
+        <thead><tr><th>Item ID</th><th>Batch / Cheque</th><th>Account</th><th>Branch</th><th>Amount</th><th>Workstep</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+            @if (Items.Count == 0)
+            {
+                <tr><td colspan="8"><div class="empty-row">No workitems match the current criteria.</div></td></tr>
+            }
+            else
+            {
+                @foreach (var row in Items)
+                {
+                    <tr class="@(SelectedId == row.ChequeId ? "selected" : null)">
+                        <td><button class="table-link" @onclick="() => OnSelect.InvokeAsync(row.ChequeId)">@row.ChequeId</button><small>@row.Direction</small></td>
+                        <td><strong>@row.BatchNo</strong><small>Cheque @row.ChequeNo</small></td>
+                        <td>@Mask(row.AccountNo)</td><td>@row.BranchCode<small>@row.BranchName</small></td>
+                        <td class="amount">@row.Currency @row.Amount.ToString("N2")</td><td>@row.WorkstepLabel</td><td><StatusPill Status="@row.Status" /></td>
+                        <td><button class="icon-button subtle" title="Open details" @onclick="() => OnSelect.InvokeAsync(row.ChequeId)">→</button></td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<ChequeSummaryModel> Items { get; set; } = [];
+    [Parameter] public string? SelectedId { get; set; }
+    [Parameter] public EventCallback<string> OnSelect { get; set; }
+    private static string Mask(string value) => value.Length <= 4 ? value : $"••••{value[^4..]}";
+}

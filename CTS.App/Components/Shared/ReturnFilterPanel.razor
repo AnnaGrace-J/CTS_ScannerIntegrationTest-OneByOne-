@@ -1,0 +1,117 @@
+<section class="panel filter-panel">
+    <div class="panel-heading">
+        <div>
+            <span class="eyebrow">QUERY CRITERIA</span>
+            <h2>Return Queue Filters</h2>
+        </div>
+        <div class="filter-header-actions">
+            <span class="result-count">@ResultCount result(s)</span>
+            <button type="button" class="secondary-button" @onclick="HandleReset">Reset Filters</button>
+            <button type="button" class="primary-button" @onclick="HandleApply">Apply Filters</button>
+        </div>
+    </div>
+
+    <div class="filter-grid-11">
+        <div class="filter-item">
+            <label for="rf-cheque-no">Cheque No.</label>
+            <input id="rf-cheque-no" @bind="Model.ChequeNo" placeholder="e.g. 100006" />
+        </div>
+        <div class="filter-item">
+            <label for="rf-batch-id">Batch No. / ICL</label>
+            <input id="rf-batch-id" @bind="Model.BatchId" placeholder="e.g. OB-20260812-005" />
+        </div>
+        <div class="filter-item">
+            <label for="rf-account-no">Credit Account No.</label>
+            <input id="rf-account-no" @bind="Model.AccountNo" placeholder="e.g. 0101001006" />
+        </div>
+        <div class="filter-item">
+            <label for="rf-drawee-bank">Drawee Bank / Routing</label>
+            <input id="rf-drawee-bank" @bind="Model.DraweeBank" placeholder="e.g. KBZ / 100001" />
+        </div>
+        <div class="filter-item">
+            <label for="rf-branch-code">Branch Code</label>
+            <input id="rf-branch-code" @bind="Model.BranchCode" placeholder="e.g. HO / 001" />
+        </div>
+        <div class="filter-item">
+            <label for="rf-amount">Amount</label>
+            <input id="rf-amount" inputmode="decimal" @bind="Model.Amount" placeholder="e.g. 8750000" />
+        </div>
+        <div class="filter-item">
+            <label for="rf-status">Return Wait Status</label>
+            <select id="rf-status" @bind="Model.ReturnStatus">
+                <option value="">All Statuses</option>
+                <option value="Pending">Pending Return</option>
+                <option value="Accepted">Deemed Accepted</option>
+                <option value="Rejected">Return Received</option>
+            </select>
+        </div>
+        <div class="filter-item">
+            <label for="rf-session">Clearing Session</label>
+            <select id="rf-session" @bind="Model.ClearingSession">
+                <option value="">All Sessions</option>
+                <option value="Session 1">Session 1 (10:00 - 14:00)</option>
+                <option value="Session 2">Session 2 (14:30 - 17:00)</option>
+            </select>
+        </div>
+        <div class="filter-item">
+            <label for="rf-value-date">Value Date</label>
+            <input id="rf-value-date" type="date" @bind="Model.ValueDate" />
+        </div>
+        <div class="filter-item">
+            <label for="rf-present-date">Presentment Date</label>
+            <input id="rf-present-date" type="date" @bind="Model.PresentmentDate" />
+        </div>
+        <div class="filter-item">
+            <label for="rf-currency">Currency</label>
+            <select id="rf-currency" @bind="Model.Currency">
+                <option value="">All Currencies</option>
+                <option value="MMK">MMK · Myanmar Kyat</option>
+                <option value="USD">USD · US Dollar</option>
+            </select>
+        </div>
+    </div>
+</section>
+
+@code {
+    public sealed class FilterModel
+    {
+        public string ChequeNo { get; set; } = string.Empty;
+        public string BatchId { get; set; } = string.Empty;
+        public string AccountNo { get; set; } = string.Empty;
+        public string DraweeBank { get; set; } = string.Empty;
+        public string BranchCode { get; set; } = string.Empty;
+        public string Amount { get; set; } = string.Empty;
+        public string ReturnStatus { get; set; } = string.Empty;
+        public string ClearingSession { get; set; } = string.Empty;
+        public DateOnly? ValueDate { get; set; }
+        public DateOnly? PresentmentDate { get; set; }
+        public string Currency { get; set; } = string.Empty;
+
+        public void Clear()
+        {
+            ChequeNo = string.Empty;
+            BatchId = string.Empty;
+            AccountNo = string.Empty;
+            DraweeBank = string.Empty;
+            BranchCode = string.Empty;
+            Amount = string.Empty;
+            ReturnStatus = string.Empty;
+            ClearingSession = string.Empty;
+            ValueDate = null;
+            PresentmentDate = null;
+            Currency = string.Empty;
+        }
+    }
+
+    [Parameter] public FilterModel Model { get; set; } = new();
+    [Parameter] public int ResultCount { get; set; }
+    [Parameter] public EventCallback OnApply { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+
+    private async Task HandleApply() => await OnApply.InvokeAsync();
+    private async Task HandleReset()
+    {
+        Model.Clear();
+        await OnReset.InvokeAsync();
+    }
+}

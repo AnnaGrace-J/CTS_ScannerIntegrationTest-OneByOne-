@@ -1,0 +1,42 @@
+<div class="sticky-action-bar">
+    <div class="sticky-action-bar-inner">
+        <div class="nav-group">
+            <button type="button" class="secondary-button icon-btn" disabled="@(!CanPrevious || IsProcessing)" @onclick="HandlePrevious">
+                <span aria-hidden="true">‹</span> Previous Cheque
+            </button>
+            <button type="button" class="secondary-button icon-btn" disabled="@(!CanNext || IsProcessing)" @onclick="HandleNext">
+                Next Cheque <span aria-hidden="true">›</span>
+            </button>
+        </div>
+
+        <div class="action-group">
+            <button type="button" class="secondary-button" disabled="@IsProcessing" @onclick="HandleExit">
+                Exit
+            </button>
+            <button type="button" class="secondary-button" disabled="@IsProcessing" @onclick="HandleSaveDraft">
+                Save Draft
+            </button>
+            <button type="button" class="primary-button" disabled="@IsProcessing" @onclick="HandleComplete">
+                ✓ @CompleteLabel
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool CanPrevious { get; set; } = true;
+    [Parameter] public bool CanNext { get; set; } = true;
+    [Parameter] public bool IsProcessing { get; set; }
+    [Parameter] public string CompleteLabel { get; set; } = "Complete Repair";
+    [Parameter] public EventCallback OnPrevious { get; set; }
+    [Parameter] public EventCallback OnNext { get; set; }
+    [Parameter] public EventCallback OnComplete { get; set; }
+    [Parameter] public EventCallback OnSaveDraft { get; set; }
+    [Parameter] public EventCallback OnExit { get; set; }
+
+    private async Task HandlePrevious() => await OnPrevious.InvokeAsync();
+    private async Task HandleNext() => await OnNext.InvokeAsync();
+    private async Task HandleComplete() => await OnComplete.InvokeAsync();
+    private async Task HandleSaveDraft() => await OnSaveDraft.InvokeAsync();
+    private async Task HandleExit() => await OnExit.InvokeAsync();
+}

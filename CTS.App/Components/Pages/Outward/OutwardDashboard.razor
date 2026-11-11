@@ -1,0 +1,5 @@
+@page "/"
+@page "/outward/dashboard"
+@attribute [Authorize(Policy = PermissionCatalog.OutwardDashboardViewPolicy)]
+<PageTitle>Outward Clearing · ACE CTS</PageTitle>
+<DashboardView Direction="OUTWARD" />

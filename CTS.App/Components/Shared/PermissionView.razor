@@ -1,0 +1,17 @@
+@if (_isAllowed)
+{
+    @ChildContent
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    [Parameter, EditorRequired] public string Code { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    private bool _isAllowed;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var state = AuthenticationState is null ? null : await AuthenticationState;
+        _isAllowed = state?.User.HasClaim("permission", Code) == true;
+    }
+}

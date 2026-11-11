@@ -1,0 +1,28 @@
+@page "/admin"
+@attribute [Authorize(Policy = PermissionCatalog.AdminUserViewPolicy)]
+@inject AdministrationApiService Client
+@inject NavigationManager Navigation
+
+<PageTitle>Administration · ACE CTS</PageTitle>
+<PageHeader Section="Administration" Title="System Administration" Subtitle="Manage CTS users, branches, clearing services and operational controls." Badge="Administrator only" />
+
+@if (_data is null) { <LoadingState Error="@_error" /> }
+else
+{
+    @if (!string.IsNullOrWhiteSpace(_notice)) { <div class="alert success">@_notice</div> }
+    @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert danger">@_error</div> }
+    <section class="metric-grid compact"><article class="metric-card info"><span>Active users</span><strong>@_data.Users.Count(x => x.IsActive)</strong><small>@_data.Users.Count total configured</small></article><article class="metric-card success"><span>Active branches</span><strong>@_data.Branches.Count(x => x.IsActive)</strong><small>Clearing participants</small></article><article class="metric-card warning"><span>Service status</span><strong>@_data.Settings.ServiceStatus</strong><small>Poll every @_data.Settings.PollIntervalSeconds seconds</small></article></section>
+    <div class="admin-grid">
+        <section class="panel"><div class="panel-heading"><div><span class="eyebrow">USER ACCESS</span><h2>Operations users</h2></div><PermissionView Code="@PermissionCatalog.AdminUserCreate"><a class="secondary-button" href="/admin/users/create">+ New user</a></PermissionView></div>
+            <div class="table-shell"><table class="data-table"><thead><tr><th>User</th><th>Role</th><th>Branch</th><th>Emp ID</th><th>Status</th><th>Last login</th></tr></thead><tbody>@foreach (var user in _data.Users) { <tr><td><strong>@user.FullName</strong><small>@user.UserName</small></td><td><span class="role-badge">@user.Role</span></td><td>@user.BranchCode (@user.BranchName)</td><td>@(string.IsNullOrWhiteSpace(user.EmployeeId) ? "-" : user.EmployeeId)</td><td><StatusPill Status="@(user.IsActive ? "Active" : "Disabled")" /></td><td>@user.LastLoginAtUtc.ToLocalTime().ToString("dd MMM, HH:mm")</td></tr> }</tbody></table></div></section>
+        <aside class="panel settings-panel"><div class="panel-heading"><div><span class="eyebrow">SERVICE CONTROL</span><h2>Clearing settings</h2></div></div><div class="form-field"><label>Inward cutoff time (HH:mm)</label><input @bind="_cutoff" placeholder="16:30" /></div><div class="form-field"><label>Poll interval (seconds)</label><InputNumber @bind-Value="_pollInterval" /></div><div class="form-field"><label>Outward processing mode</label><select @bind="_outwardMode"><option>Manual</option><option>Automatic</option></select></div><div class="form-field"><label>Inward processing mode</label><select @bind="_inwardMode"><option>Manual</option><option>Automatic</option></select></div><PermissionView Code="@PermissionCatalog.AdminSettingsUpdate"><button class="primary-button wide" @onclick="SaveSettingsAsync">Save service settings</button></PermissionView></aside>
+    </div>
+    <section class="panel"><div class="panel-heading"><div><span class="eyebrow">AUDIT TRAIL</span><h2>Recent administrative and workflow events</h2></div></div><div class="audit-table">@foreach (var audit in _data.RecentAudit) { <div><time>@audit.OccurredAtUtc.ToLocalTime().ToString("dd MMM yyyy HH:mm")</time><strong>@audit.Actor</strong><span>@audit.Action.Replace('_', ' ')</span><p>@audit.Note</p></div> }</div></section>
+}
+
+@code {
+    private AdminOverviewResponseModel? _data; private string? _error; private string? _notice; private string _cutoff = "16:30"; private int _pollInterval = 30; private string _outwardMode = "Manual"; private string _inwardMode = "Manual";
+    protected override Task OnInitializedAsync() => LoadAsync();
+    private async Task LoadAsync() { var result = await Client.OverviewAsync(); if (result.IsSuccess && result.Data is not null) { _data = result.Data; _cutoff = _data.Settings.InwardCutoffTime; _pollInterval = _data.Settings.PollIntervalSeconds; _outwardMode = _data.Settings.OutwardMode; _inwardMode = _data.Settings.InwardMode; } else _error = result.Message; }
+    private async Task SaveSettingsAsync() { var result = await Client.UpdateSettingsAsync(new(_cutoff, _pollInterval, _outwardMode, _inwardMode)); if (result.IsSuccess) { _notice = "Service settings saved and audit event recorded."; await LoadAsync(); } else _error = result.Message; }
+}

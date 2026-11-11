@@ -1,0 +1,321 @@
+@page "/admin/role-permissions"
+@attribute [Authorize(Policy = PermissionCatalog.AdminRbacManagePolicy)]
+@inject RoleAndPermissionApiService Client
+
+<PageTitle>Roles &amp; Permissions · ACE CTS</PageTitle>
+
+@if (_data is null)
+{
+    <LoadingState Error="@_error" />
+}
+else
+{
+    <section class="role-permission-workspace" aria-labelledby="permission-matrix-title" aria-busy="@_saving">
+        <header class="role-permission-toolbar">
+            <div class="role-permission-title">
+                <h1 id="permission-matrix-title">Role permission matrix</h1>
+                <span>@VisiblePermissionCount/@_data.Permissions.Count permissions</span>
+            </div>
+            <div class="permission-search">
+                <label for="permission-search">Search</label>
+                <div class="permission-search-control">
+                    <span aria-hidden="true">⌕</span>
+                    <input id="permission-search"
+                           type="search"
+                           placeholder="Permission, code, module or route"
+                           autocomplete="off"
+                           @bind="_searchTerm"
+                           @bind:event="oninput" />
+                </div>
+            </div>
+            <p class="matrix-change-summary" aria-live="polite">@ChangeSummary</p>
+            <div class="matrix-actions">
+                <button type="button" class="secondary-button" disabled="@(!HasChanges || _saving)" @onclick="ResetChanges">Reset</button>
+                <button type="button" class="primary-button" disabled="@(!HasChanges || _saving)" @onclick="SaveAsync">@(_saving ? "Saving..." : "Save changes")</button>
+            </div>
+        </header>
+
+        <div class="role-permission-feedback">
+            @if (!string.IsNullOrWhiteSpace(_notice))
+            {
+                <div class="alert success" role="status">@_notice</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="alert danger" role="alert">@_error</div>
+            }
+        </div>
+
+        <div class="role-permission-table-wrap full-matrix" role="region" aria-labelledby="permission-matrix-title" tabindex="0">
+            <table class="role-permission-table">
+                <caption class="sr-only">Permission assignments by CTS role. Use the checkboxes to grant or revoke permissions, then save changes.</caption>
+                <colgroup>
+                    <col class="permission-name-column" />
+                    @foreach (var role in _data.Roles)
+                    {
+                        <col class="role-column" />
+                    }
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th scope="col" class="permission-heading">
+                            <span>Permission</span>
+                            <small>@_data.Permissions.Count available</small>
+                        </th>
+                        @foreach (var role in _data.Roles)
+                        {
+                            <th scope="col" class="role-heading">
+                                <span class="role-heading-name">@role.RoleName</span>
+                                <span class="role-heading-meta">@role.RoleCode · @GetSelectedCount(role.RoleId) · @(role.IsActive ? "Active" : "Disabled")</span>
+                                <label class="role-select-all">
+                                    <input type="checkbox"
+                                           checked="@IsAllActiveAssigned(role.RoleId)"
+                                           disabled="@(!role.IsActive || _saving)"
+                                           aria-label="@GetRoleSelectionLabel(role)"
+                                           @onchange="args => ToggleRole(role, args)" />
+                                    <span>Select all</span>
+                                </label>
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                @if (VisiblePermissionGroups.Count == 0)
+                {
+                    <tbody>
+                        <tr>
+                            <td class="permission-empty" colspan="@(_data.Roles.Count + 1)">No permissions match “@_searchTerm”.</td>
+                        </tr>
+                    </tbody>
+                }
+                else
+                {
+                    @foreach (var module in VisiblePermissionGroups)
+                    {
+                        <tbody class="permission-module">
+                            <tr class="permission-module-heading">
+                                <th colspan="@(_data.Roles.Count + 1)">
+                                    <span>@module.Key</span>
+                                    <small>@module.Count() permissions</small>
+                                </th>
+                            </tr>
+                            @foreach (var permission in module)
+                            {
+                                <tr class="@(!permission.IsActive ? "permission-inactive" : null)">
+                                    <th scope="row" class="permission-detail">
+                                        <span class="permission-name">@permission.PermissionName</span>
+                                        <code>@permission.PermissionCode</code>
+                                        @if (!string.IsNullOrWhiteSpace(permission.RoutePath))
+                                        {
+                                            <small class="permission-route sr-only">Route: @permission.RoutePath</small>
+                                        }
+                                        @if (!permission.IsActive)
+                                        {
+                                            <span class="permission-state">Inactive</span>
+                                        }
+                                    </th>
+                                    @foreach (var role in _data.Roles)
+                                    {
+                                        var isRequired = IsRequiredAssignment(role, permission);
+                                        <td class="permission-assignment @(IsAssigned(role.RoleId, permission.PermissionCode) ? "assigned" : null)">
+                                            <label class="matrix-checkbox" title="@GetAssignmentTitle(role, permission)">
+                                                <input type="checkbox"
+                                                       checked="@IsAssigned(role.RoleId, permission.PermissionCode)"
+                                                       disabled="@(!role.IsActive || !permission.IsActive || isRequired || _saving)"
+                                                       aria-label="@GetPermissionLabel(permission, role)"
+                                                       @onchange="args => ToggleAssignment(role, permission, args)" />
+                                                <span aria-hidden="true"></span>
+                                            </label>
+                                            @if (isRequired)
+                                            {
+                                                <small class="matrix-required">Required</small>
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    }
+                }
+            </table>
+        </div>
+    </section>
+}
+
+@code {
+    private RolePermissionListResponseModel? _data;
+    private Dictionary<int, HashSet<string>> _savedPermissions = [];
+    private Dictionary<int, HashSet<string>> _selectedPermissions = [];
+    private string _searchTerm = string.Empty;
+    private string? _error;
+    private string? _notice;
+    private bool _saving;
+
+    private IReadOnlyList<IGrouping<string, RolePermissionItemModel>> VisiblePermissionGroups =>
+        _data is null
+            ? []
+            : _data.Permissions
+                .Where(MatchesSearch)
+                .GroupBy(x => x.ModuleName)
+                .ToArray();
+
+    private int VisiblePermissionCount => VisiblePermissionGroups.Sum(x => x.Count());
+    private bool HasChanges => _data?.Roles.Any(role => IsRoleChanged(role.RoleId)) == true;
+    private int ChangedRoleCount => _data?.Roles.Count(role => IsRoleChanged(role.RoleId)) ?? 0;
+    private string ChangeSummary => _saving
+        ? "Saving…"
+        : ChangedRoleCount == 0
+            ? "Saved"
+            : $"{ChangedRoleCount} {(ChangedRoleCount == 1 ? "role" : "roles")} changed";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Client.ListAsync();
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _error = result.Message;
+            return;
+        }
+
+        _data = result.Data;
+        var activeCodes = _data.Permissions
+            .Where(x => x.IsActive)
+            .Select(x => x.PermissionCode)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _savedPermissions = _data.Roles.ToDictionary(
+            role => role.RoleId,
+            role => role.PermissionCodes.Where(activeCodes.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase));
+        _selectedPermissions = CloneSelections(_savedPermissions);
+    }
+
+    private bool MatchesSearch(RolePermissionItemModel permission)
+    {
+        var term = _searchTerm.Trim();
+        return term.Length == 0
+            || permission.PermissionName.Contains(term, StringComparison.OrdinalIgnoreCase)
+            || permission.PermissionCode.Contains(term, StringComparison.OrdinalIgnoreCase)
+            || permission.ModuleName.Contains(term, StringComparison.OrdinalIgnoreCase)
+            || (permission.RoutePath?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private bool IsAssigned(int roleId, string permissionCode) =>
+        _selectedPermissions.TryGetValue(roleId, out var codes) && codes.Contains(permissionCode);
+
+    private int GetSelectedCount(int roleId) =>
+        _selectedPermissions.TryGetValue(roleId, out var codes) ? codes.Count : 0;
+
+    private bool IsAllActiveAssigned(int roleId)
+    {
+        if (_data is null || !_selectedPermissions.TryGetValue(roleId, out var selected)) return false;
+        var activeCodes = _data.Permissions.Where(x => x.IsActive).Select(x => x.PermissionCode).ToArray();
+        return activeCodes.Length > 0 && activeCodes.All(selected.Contains);
+    }
+
+    private bool IsRoleChanged(int roleId) =>
+        _savedPermissions.TryGetValue(roleId, out var saved)
+        && _selectedPermissions.TryGetValue(roleId, out var selected)
+        && !saved.SetEquals(selected);
+
+    private static bool IsRequiredAssignment(RolePermissionRoleModel role, RolePermissionItemModel permission) =>
+        role.RoleCode.Equals("ADMIN", StringComparison.OrdinalIgnoreCase)
+        && permission.PermissionCode.Equals(PermissionCatalog.AdminRbacManage, StringComparison.OrdinalIgnoreCase);
+
+    private void ToggleAssignment(RolePermissionRoleModel role, RolePermissionItemModel permission, ChangeEventArgs args)
+    {
+        if (!role.IsActive || !permission.IsActive || IsRequiredAssignment(role, permission)) return;
+        if (args.Value is true) _selectedPermissions[role.RoleId].Add(permission.PermissionCode);
+        else _selectedPermissions[role.RoleId].Remove(permission.PermissionCode);
+        ClearFeedback();
+    }
+
+    private void ToggleRole(RolePermissionRoleModel role, ChangeEventArgs args)
+    {
+        if (_data is null || !role.IsActive) return;
+        var selected = _selectedPermissions[role.RoleId];
+        if (args.Value is true)
+        {
+            selected.UnionWith(_data.Permissions.Where(x => x.IsActive).Select(x => x.PermissionCode));
+        }
+        else
+        {
+            selected.Clear();
+            if (role.RoleCode.Equals("ADMIN", StringComparison.OrdinalIgnoreCase))
+                selected.Add(PermissionCatalog.AdminRbacManage);
+        }
+        ClearFeedback();
+    }
+
+    private void ResetChanges()
+    {
+        _selectedPermissions = CloneSelections(_savedPermissions);
+        ClearFeedback();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_data is null || !HasChanges) return;
+        _saving = true;
+        ClearFeedback();
+
+        try
+        {
+            var changedRoles = _data.Roles.Where(role => IsRoleChanged(role.RoleId)).ToArray();
+            var request = new RolePermissionMatrixUpdateRequestModel(changedRoles
+                .Select(role => new RolePermissionMatrixRoleRequestModel(
+                    role.RoleId,
+                    _selectedPermissions[role.RoleId].OrderBy(x => x).ToArray()))
+                .ToArray());
+            var result = await Client.UpdateMatrixAsync(request);
+            if (!result.IsSuccess || result.Data is null)
+            {
+                _error = result.Message;
+                return;
+            }
+
+            var updatedByRoleId = result.Data.Roles.ToDictionary(x => x.RoleId);
+            foreach (var updatedRole in result.Data.Roles)
+            {
+                var codes = updatedRole.PermissionCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                _savedPermissions[updatedRole.RoleId] = new HashSet<string>(codes, StringComparer.OrdinalIgnoreCase);
+                _selectedPermissions[updatedRole.RoleId] = codes;
+            }
+
+            _data = _data with
+            {
+                Roles = _data.Roles
+                    .Select(role => updatedByRoleId.TryGetValue(role.RoleId, out var updated)
+                        ? role with { PermissionCodes = updated.PermissionCodes }
+                        : role)
+                    .ToArray()
+            };
+            _notice = result.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private string GetRoleSelectionLabel(RolePermissionRoleModel role) =>
+        IsAllActiveAssigned(role.RoleId)
+            ? $"Remove all optional permissions from {role.RoleName}"
+            : $"Assign all active permissions to {role.RoleName}";
+
+    private static string GetPermissionLabel(RolePermissionItemModel permission, RolePermissionRoleModel role) =>
+        $"Assign {permission.PermissionName} ({permission.PermissionCode}) to {role.RoleName}";
+
+    private static string GetAssignmentTitle(RolePermissionRoleModel role, RolePermissionItemModel permission) =>
+        IsRequiredAssignment(role, permission)
+            ? "Required for administrator access"
+            : !role.IsActive
+                ? "This role is disabled"
+                : !permission.IsActive
+                    ? "This permission is inactive"
+                    : $"{permission.PermissionName} for {role.RoleName}";
+
+    private void ClearFeedback() => _error = _notice = null;
+
+    private static Dictionary<int, HashSet<string>> CloneSelections(Dictionary<int, HashSet<string>> source) =>
+        source.ToDictionary(
+            item => item.Key,
+            item => new HashSet<string>(item.Value, StringComparer.OrdinalIgnoreCase));
+}

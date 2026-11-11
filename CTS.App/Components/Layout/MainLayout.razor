@@ -1,0 +1,58 @@
+@inherits LayoutComponentBase
+
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<ToastContainer />
+
+<div class="app-shell">
+    <aside class="sidebar" aria-label="CTS workspace">
+        <div class="brand-block">
+            <div class="brand-mark">ACE</div>
+            <div><strong>CTS Workspace</strong><span>Cheque Truncation System</span></div>
+        </div>
+        <NavMenu />
+        <div class="sidebar-footer">
+            <span class="health-dot"></span>
+            <div><strong>Services online</strong><span>Connected to CTS API</span></div>
+        </div>
+    </aside>
+
+    <section class="workspace">
+        <header class="command-bar">
+            <div>
+                <span class="eyebrow">ACE BANK OPERATIONS</span>
+                <strong>Cheque Truncation System</strong>
+            </div>
+            <AuthorizeView>
+                <Authorized Context="auth">
+                    <div class="command-actions">
+                        <a class="command-link" href="/search">Search</a>
+                        <ThemeToggle />
+                        <div class="user-chip">
+                            <span class="avatar">@Initials(auth.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value ?? auth.User.Identity?.Name)</span>
+                            <div><strong>@(auth.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value ?? auth.User.Identity?.Name)</strong><span>@auth.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value · @auth.User.FindFirst("branch_code")?.Value</span></div>
+                        </div>
+                        <form method="post" action="/account/logout">
+                            <AntiforgeryToken />
+                            <button class="icon-button" type="submit" title="Sign out" aria-label="Sign out">↪</button>
+                        </form>
+                    </div>
+                </Authorized>
+            </AuthorizeView>
+        </header>
+        <main id="main-content" class="page-canvas" tabindex="-1">
+            @Body
+        </main>
+    </section>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unexpected error occurred. <a href=".">Reload</a>
+</div>
+
+@code {
+    private static string Initials(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "U";
+        return string.Concat(value.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x => char.ToUpperInvariant(x[0])));
+    }
+}

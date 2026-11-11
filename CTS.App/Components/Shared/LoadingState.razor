@@ -1,0 +1,13 @@
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert danger"><strong>Unable to load data</strong><span>@Error</span></div>
+}
+else
+{
+    <div class="loading-panel"><span class="spinner"></span><span>@Message</span></div>
+}
+
+@code {
+    [Parameter] public string Message { get; set; } = "Loading workspace data...";
+    [Parameter] public string? Error { get; set; }
+}

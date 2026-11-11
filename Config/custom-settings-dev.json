@@ -1,0 +1,23 @@
+//{
+//  "ConnectionStrings": {
+//    "DefaultConnection": ""
+//  },
+//  "Jwt": {
+//    "Key": ""
+//  },
+//  "CtsApi": {
+//    "BaseUrl": "http://localhost:5263/api/"
+//  }
+//}
+
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=10.1.1.56;Database=CTS;User Id=sa;Password=sasa@123;TrustServerCertificate=True;MultipleActiveResultSets=True;"
+  },
+  "Jwt": {
+    "Key": "CTS_Secret_Key_For_Jwt_Token_Authentication_2026_Min_32_Chars!"
+  },
+  "CtsApi": {
+    "BaseUrl": "http://localhost:5263/api/"
+  }
+}

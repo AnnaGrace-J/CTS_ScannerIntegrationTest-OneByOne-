@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="390" viewBox="0 0 980 390" role="img" aria-label="Generated placeholder cheque one">
+  <rect width="980" height="390" fill="#f8fbfd"/>
+  <rect x="18" y="18" width="944" height="354" rx="4" fill="#ffffff" stroke="#67869a" stroke-width="3"/>
+  <path d="M18 86H962" stroke="#d0dde6" stroke-width="2"/>
+  <path d="M18 302H962" stroke="#d0dde6" stroke-width="2"/>
+  <text x="42" y="58" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#126070">MM Demo Bank</text>
+  <text x="760" y="58" font-family="Arial, sans-serif" font-size="18" fill="#334155">No. 908421</text>
+  <text x="42" y="118" font-family="Arial, sans-serif" font-size="18" fill="#475569">Pay to</text>
+  <rect x="118" y="94" width="620" height="38" fill="#eef3f7" stroke="#a8bac8"/>
+  <text x="132" y="120" font-family="Arial, sans-serif" font-size="20" fill="#1f2937">Demo Trading Co.</text>
+  <rect x="772" y="94" width="148" height="38" fill="#eef3f7" stroke="#a8bac8"/>
+  <text x="790" y="120" font-family="Arial, sans-serif" font-size="19" font-weight="700" fill="#1f2937">MMK 1,250,000</text>
+  <text x="42" y="174" font-family="Arial, sans-serif" font-size="18" fill="#475569">Amount in words</text>
+  <rect x="190" y="150" width="730" height="38" fill="#eef3f7" stroke="#a8bac8"/>
+  <text x="205" y="176" font-family="Arial, sans-serif" font-size="18" fill="#1f2937">One million two hundred fifty thousand only</text>
+  <text x="42" y="230" font-family="Arial, sans-serif" font-size="16" fill="#475569">A/C 000-245-117999</text>
+  <text x="42" y="260" font-family="Arial, sans-serif" font-size="16" fill="#475569">Yangon Main Branch</text>
+  <rect x="702" y="226" width="212" height="54" fill="#fff" stroke="#a8bac8"/>
+  <path d="M720 262 C748 232, 768 292, 804 250 S874 246, 896 230" fill="none" stroke="#29384a" stroke-width="4" stroke-linecap="round"/>
+  <text x="718" y="322" font-family="monospace" font-size="22" fill="#111827">908421 000245117999 001</text>
+</svg>

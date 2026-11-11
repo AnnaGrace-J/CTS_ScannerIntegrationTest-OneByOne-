@@ -1,0 +1,166 @@
+@using CTS.App.Services
+@inject ToastService ToastService
+@implements IDisposable
+
+<div class="toast-container-top-right">
+    @foreach (var toast in _toasts)
+    {
+        <div class="toast-item @toast.Type.ToString().ToLowerInvariant()" @key="toast.Id">
+            <div class="toast-icon">
+                @if (toast.Type == ToastType.Success)
+                {
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                }
+                else if (toast.Type == ToastType.Error)
+                {
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                }
+                else
+                {
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                }
+            </div>
+            <div class="toast-content">
+                <span class="toast-title">@(toast.Type == ToastType.Success ? "Success" : toast.Type == ToastType.Error ? "Error" : "Notice")</span>
+                <span class="toast-message">@toast.Message</span>
+            </div>
+            <button class="toast-close" type="button" @onclick="() => Dismiss(toast.Id)">&times;</button>
+        </div>
+    }
+</div>
+
+<style>
+    .toast-container-top-right {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-width: 400px;
+        width: calc(100vw - 40px);
+        pointer-events: none;
+    }
+
+    .toast-item {
+        pointer-events: auto;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 4px 10px -2px rgba(0, 0, 0, 0.05);
+        border-left: 4px solid #3b82f6;
+        animation: toast-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: all 0.2s ease;
+    }
+
+    .toast-item.success {
+        border-left-color: #10b981;
+        background: #f0fdf4;
+    }
+    .toast-item.success .toast-icon { color: #10b981; }
+    .toast-item.success .toast-title { color: #065f46; }
+
+    .toast-item.error {
+        border-left-color: #ef4444;
+        background: #fef2f2;
+    }
+    .toast-item.error .toast-icon { color: #ef4444; }
+    .toast-item.error .toast-title { color: #991b1b; }
+
+    .toast-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 2px;
+    }
+
+    .toast-content {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        flex: 1;
+    }
+
+    .toast-title {
+        font-weight: 700;
+        font-size: 0.875rem;
+    }
+
+    .toast-message {
+        font-size: 0.85rem;
+        color: #374151;
+        line-height: 1.4;
+    }
+
+    .toast-close {
+        background: transparent;
+        border: none;
+        font-size: 1.25rem;
+        color: #9ca3af;
+        cursor: pointer;
+        padding: 0;
+        margin-left: 4px;
+        line-height: 1;
+    }
+
+    .toast-close:hover {
+        color: #4b5563;
+    }
+
+    @@keyframes toast-slide-in {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+</style>
+
+@code {
+    private readonly List<ToastMessage> _toasts = new();
+
+    protected override void OnInitialized()
+    {
+        ToastService.OnShow += HandleShow;
+        ToastService.OnDismiss += HandleDismiss;
+    }
+
+    private void HandleShow(ToastMessage toast)
+    {
+        InvokeAsync(() =>
+        {
+            _toasts.Add(toast);
+            StateHasChanged();
+            
+            // Auto dismiss after 5 seconds
+            _ = Task.Delay(5000).ContinueWith(_ => Dismiss(toast.Id));
+        });
+    }
+
+    private void HandleDismiss(string id)
+    {
+        InvokeAsync(() =>
+        {
+            _toasts.RemoveAll(x => x.Id == id);
+            StateHasChanged();
+        });
+    }
+
+    private void Dismiss(string id)
+    {
+        HandleDismiss(id);
+    }
+
+    public void Dispose()
+    {
+        ToastService.OnShow -= HandleShow;
+        ToastService.OnDismiss -= HandleDismiss;
+    }
+}

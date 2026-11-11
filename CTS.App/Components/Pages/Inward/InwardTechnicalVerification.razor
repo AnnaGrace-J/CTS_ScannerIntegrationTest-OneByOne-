@@ -1,0 +1,1371 @@
+@page "/inward/technical-verification"
+@attribute [Authorize]
+@inject WorkspaceApiService Client
+@inject NavigationManager Navigation
+
+<PageTitle>Technical Verification · ACE CTS</PageTitle>
+
+<div class="tech-ver-root">
+    @* TOP WORKSPACE SUBHEADER *@
+    <div class="tech-top-bar">
+        <div class="tech-top-left">
+            <div class="tech-brand-title">ACE CTS Workspace</div>
+            <div class="tech-brand-meta">
+                <span><span class="meta-icon">🗓</span> Business date 2026-06-23</span>
+                <span><span class="meta-icon">🏛</span> Head Office</span>
+                <span>Role: ADMIN</span>
+            </div>
+        </div>
+        <div class="tech-top-right">
+            <span class="tech-badge-audit">Audit events: @(_auditEntries.Count > 0 ? _auditEntries.Count : 51)</span>
+            <span class="tech-badge-user">admin1</span>
+        </div>
+    </div>
+
+    @* HEADER CARD WITH PILLS & ACTIONS *@
+    <div class="tech-card tech-header-card">
+        <div class="tech-header-left">
+            <h1 class="tech-header-title">Technical Verification</h1>
+            <span class="tech-chip chip-sla">Within SLA</span>
+            <span class="tech-chip chip-cyan">BRANCH <strong>Head Office</strong></span>
+            <span class="tech-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+            <span class="tech-chip chip-blue">DATE <strong>2026-09-14</strong></span>
+        </div>
+        <div class="tech-header-right">
+            <button type="button" class="tech-btn-outline" @onclick="RunCutoffCheck">
+                Run Cutoff Check
+            </button>
+            <button type="button" class="tech-btn-outline" @onclick="() => _showInfo = !_showInfo">
+                <span class="btn-icon">👁</span> @(_showInfo ? "Hide Info" : "Show Info")
+            </button>
+        </div>
+    </div>
+
+    @if (_showInfo)
+    {
+        <div class="tech-card tech-info-drawer">
+            <div class="tech-info-grid">
+                <div>
+                    <span class="info-label">Queue Items</span>
+                    <strong class="info-val">@FilteredCheques.Count item(s) awaiting verification</strong>
+                </div>
+                <div>
+                    <span class="info-label">Selected Cheque</span>
+                    <strong class="info-val font-mono">@(_selectedCheque?.ChequeNo ?? "None")</strong>
+                </div>
+                <div>
+                    <span class="info-label">Inward Cutoff</span>
+                    <strong class="info-val">14:00 MMT (Session 1)</strong>
+                </div>
+                <div>
+                    <span class="info-label">CBS Mock Mode</span>
+                    <strong class="info-val">Account fetched (Mock Active)</strong>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* SUMMARY STATS STRIP CARD *@
+    <div class="tech-card tech-summary-strip">
+        <div class="summary-pills-left">
+            <span class="tech-pill pill-blue">
+                <span class="pill-label">PENDING VERIFICATION</span>
+                <span class="pill-val">@FilteredCheques.Count</span>
+            </span>
+            <span class="tech-pill pill-amber">
+                <span class="pill-label">REFERRED CANDIDATES</span>
+                <span class="pill-val">0</span>
+            </span>
+            <span class="tech-pill pill-danger">
+                <span class="pill-label">REJECTED CANDIDATES</span>
+                <span class="pill-val">1</span>
+            </span>
+            <span class="tech-pill pill-green">
+                <span class="pill-label">CUTOFF RISK</span>
+                <span class="pill-val">Within SLA</span>
+            </span>
+        </div>
+        <div class="summary-btn-right">
+            <button type="button" class="tech-btn-outline-sm" @onclick="() => _showSummary = !_showSummary">
+                <span class="btn-icon">👁</span> @(_showSummary ? "Hide Summary" : "Show Summary")
+            </button>
+        </div>
+    </div>
+
+    @if (_showSummary)
+    {
+        <div class="tech-card tech-summary-drawer">
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <span class="m-label">Pending Verification</span>
+                    <strong class="m-val text-blue">@FilteredCheques.Count</strong>
+                </div>
+                <div class="metric-box">
+                    <span class="m-label">Referred Candidates</span>
+                    <strong class="m-val text-amber">0</strong>
+                </div>
+                <div class="metric-box">
+                    <span class="m-label">Rejected Candidates</span>
+                    <strong class="m-val text-danger">1</strong>
+                </div>
+                <div class="metric-box">
+                    <span class="m-label">Cutoff Time</span>
+                    <strong class="m-val text-green">14:00 MMT (Within SLA)</strong>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* PO EXCEPTION BANNER (WHEN PO CHEQUE IS ACTIVE) *@
+    @if (_selectedCheque?.ChequeType == "2 / PO" || _selectedCheque?.IsPo == true)
+    {
+        <div class="tech-banner banner-amber">
+            <span class="banner-icon">⚠</span>
+            <span>PO-specific handling: balance and signature specimen are hidden; an accepted PO routes to Return ICL Creation.</span>
+        </div>
+    }
+
+    @* VALIDATION / NOTICE MESSAGE BANNER *@
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="tech-banner banner-info">
+            <span class="banner-icon">ℹ</span>
+            <span>@_message</span>
+        </div>
+    }
+
+    @* TECHNICAL VERIFICATION FILTERS CARD *@
+    <div class="tech-card tech-filter-panel">
+        <div class="filter-panel-head">
+            <div>
+                <h2 class="filter-panel-title">Technical Verification Filters</h2>
+                <span class="filter-panel-count">@FilteredCheques.Count matching record(s)</span>
+            </div>
+            <button type="button" class="tech-btn-outline-sm" @onclick="() => _showFilters = !_showFilters">
+                <span class="btn-icon">@(_showFilters ? "⌃" : "⌄")</span> @(_showFilters ? "Hide Filters" : "Show Filters")
+            </button>
+        </div>
+
+        @if (_showFilters)
+        {
+            <div class="filter-inputs-grid">
+                <div class="filter-input-col">
+                    <label class="filter-label">Cheque No.</label>
+                    <input type="text" class="filter-text-input" placeholder="Search cheque no..." @bind="_filterChequeNo" @bind:event="oninput" />
+                </div>
+                <div class="filter-input-col">
+                    <label class="filter-label">Amount</label>
+                    <input type="text" class="filter-text-input" placeholder="Search amount..." @bind="_filterAmount" @bind:event="oninput" />
+                </div>
+                <div class="filter-input-col">
+                    <label class="filter-label">MICR A/c No.</label>
+                    <input type="text" class="filter-text-input" placeholder="Search MICR a/c..." @bind="_filterMicrAccount" @bind:event="oninput" />
+                </div>
+                <div class="filter-input-col">
+                    <label class="filter-label">Routing No.</label>
+                    <input type="text" class="filter-text-input" placeholder="Search routing no..." @bind="_filterRouting" @bind:event="oninput" />
+                </div>
+                <div class="filter-input-col">
+                    <label class="filter-label">Customer A/c No.</label>
+                    <input type="text" class="filter-text-input" placeholder="Search customer a/c..." @bind="_filterCustomerAccount" @bind:event="oninput" />
+                </div>
+            </div>
+        }
+    </div>
+
+    @* TECHNICAL VERIFICATION QUEUE TABLE CARD *@
+    <div class="tech-card tech-table-card">
+        <div class="table-card-head">
+            <h2 class="table-card-title">Technical Verification Queue</h2>
+        </div>
+        <div class="table-scroll-wrap">
+            <table class="tech-data-table">
+                <thead>
+                    <tr>
+                        <th>CHEQUE NUMBER</th>
+                        <th>ROUTING NUMBER</th>
+                        <th>MICR ACCOUNT NUMBER</th>
+                        <th>AMOUNT</th>
+                        <th>CUSTOMER A/C NO.</th>
+                        <th>STATUS</th>
+                        <th style="width: 40px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (FilteredCheques.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="table-empty-cell">
+                                <div class="empty-state-box">
+                                    <span class="empty-icon">📄</span>
+                                    <strong class="empty-title">No matching records found</strong>
+                                    <p class="empty-desc">Adjust search filters to view inward cheques awaiting technical verification.</p>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var chk in FilteredCheques)
+                        {
+                            var isSelected = _selectedCheque?.ChequeId == chk.ChequeId;
+                            <tr class="table-row-clickable @(isSelected ? "row-selected" : null)" @onclick="() => SelectCheque(chk)">
+                                <td class="font-mono font-bold text-blue">@chk.ChequeNo</td>
+                                <td class="font-mono">@chk.RoutingNo</td>
+                                <td class="font-mono">@chk.MicrAccountNo</td>
+                                <td class="font-bold">@chk.Amount.ToString("N2")</td>
+                                <td class="font-mono">@chk.CustomerAccountNo</td>
+                                <td>
+                                    <span class="status-chip chip-scanned">@chk.Status</span>
+                                </td>
+                                <td class="text-right">
+                                    <span class="chevron-indicator">›</span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (_selectedCheque is not null)
+    {
+        @* TWO-COLUMN WORKSPACE GRID *@
+        <div class="tech-workspace-grid">
+            @* LEFT COLUMN: CHEQUE IMAGE REVIEW & DECISION PANEL *@
+            <div class="tech-col-left">
+                <!-- Cheque Image Review Card -->
+                <div class="tech-card tech-viewer-card">
+                    <div class="viewer-head-row">
+                        <div class="viewer-head-left">
+                            <h3 class="viewer-title">Cheque Image Review</h3>
+                            <span class="viewer-subtitle">Cheque @_selectedCheque.ChequeNo | UIC: @_selectedCheque.Uic</span>
+                        </div>
+                    </div>
+                    <div class="viewer-chips-row">
+                        <span class="status-chip chip-scanned">Scanned</span>
+                        <span class="status-chip chip-routing">Routing @_selectedCheque.RoutingNo</span>
+                    </div>
+                    
+                    <div class="viewer-canvas-box">
+                        <div class="viewer-toolbar">
+                            <div class="tab-pills">
+                                <button type="button" class="tab-pill @(_activeImageTab == "front" ? "tab-active" : "")" @onclick='() => _activeImageTab = "front"'>Front Image</button>
+                                <button type="button" class="tab-pill @(_activeImageTab == "rear" ? "tab-active" : "")" @onclick='() => _activeImageTab = "rear"'>Rear Image</button>
+                            </div>
+                            <div class="zoom-controls">
+                                <button type="button" class="zoom-btn" @onclick="() => _zoomLevel = Math.Max(0.5, _zoomLevel - 0.2)">−</button>
+                                <span class="zoom-text">@((int)(_zoomLevel * 100))%</span>
+                                <button type="button" class="zoom-btn" @onclick="() => _zoomLevel = Math.Min(2.5, _zoomLevel + 0.2)">+</button>
+                            </div>
+                        </div>
+
+                        <div class="canvas-viewport">
+                            <div class="crosshair-target"></div>
+                            <img src="@(_activeImageTab == "front" ? _selectedCheque.FrontImageUrl : _selectedCheque.BackImageUrl)"
+                                 alt="Cheque Image"
+                                 class="cheque-img-display"
+                                 style="transform: scale(@_zoomLevel);" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Decision Panel Card -->
+                <div class="tech-card tech-decision-card">
+                    <div class="card-section-head">
+                        <h3 class="panel-section-title">Decision Panel</h3>
+                    </div>
+
+                    <!-- CHEQUE DETAILS INNER BOX -->
+                    <div class="decision-group">
+                        <div class="group-title">CHEQUE DETAILS</div>
+                        <div class="meta-rows-list">
+                            <div class="meta-row">
+                                <span class="m-label">Cheque No.</span>
+                                <strong class="m-val font-mono">@_selectedCheque.ChequeNo</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">Routing No.</span>
+                                <strong class="m-val font-mono">@_selectedCheque.RoutingNo</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">MICR A/c No.</span>
+                                <strong class="m-val font-mono">@_selectedCheque.MicrAccountNo</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">Check Digit</span>
+                                <strong class="m-val font-mono">@_selectedCheque.CheckDigit</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">Amount</span>
+                                <strong class="m-val font-bold font-mono">@_selectedCheque.Amount.ToString("N2")</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">PB Details</span>
+                                <strong class="m-val">@_selectedCheque.PbDetails</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">Cheque Type</span>
+                                <strong class="m-val">@_selectedCheque.ChequeType</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">Settlement Date</span>
+                                <strong class="m-val font-mono">@_selectedCheque.SettlementDate</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DECISION GUIDANCE INNER BOX -->
+                    <div class="decision-group mt-3">
+                        <div class="group-title">DECISION GUIDANCE</div>
+                        <div class="meta-rows-list">
+                            <div class="meta-row">
+                                <span class="m-label">Selected</span>
+                                <span class="status-chip chip-accepted">@_decision</span>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">Accept Target</span>
+                                <strong class="m-val">@(_selectedCheque.IsPo ? "Return ICL Creation" : "Debit Posting")</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">Reject Target</span>
+                                <strong class="m-val">Return ICL Creation</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">Refer Target</span>
+                                <strong class="m-val">Referral</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* REASON & REMARKS INPUTS WHEN NOT ACCEPTED *@
+                    @if (_decision != "Accept")
+                    {
+                        <div class="decision-reason-box mt-3">
+                            <div class="form-field mb-2">
+                                <label class="field-label">Reject / Refer Reason</label>
+                                <select class="filter-text-input" @bind="_rejectReason">
+                                    <option value="Insufficient Funds">Insufficient Funds</option>
+                                    <option value="Signature Differs / Incomplete">Signature Differs / Incomplete</option>
+                                    <option value="Payment Stopped By Drawer">Payment Stopped By Drawer</option>
+                                    <option value="Post-dated / Stale Cheque">Post-dated / Stale Cheque</option>
+                                    <option value="Refer to Drawer">Refer to Drawer</option>
+                                    <option value="Account Blocked / Frozen">Account Blocked / Frozen</option>
+                                </select>
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Remarks</label>
+                                <textarea class="filter-text-input" rows="2" placeholder="Enter decision remarks..." @bind="_remarks"></textarea>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* RIGHT COLUMN: ACCOUNT & SIGNATURE WORKSPACE *@
+            <div class="tech-col-right">
+                <div class="tech-card tech-account-card">
+                    <div class="card-section-head">
+                        <h3 class="panel-section-title">Account &amp; Signature Workspace</h3>
+                    </div>
+
+                    <!-- CBS FETCH RESULT INNER BOX -->
+                    <div class="account-group">
+                        <div class="group-title">CBS FETCH RESULT</div>
+                        <div class="meta-rows-list">
+                            <div class="meta-row">
+                                <span class="m-label">Result</span>
+                                <span class="status-chip chip-accepted">Account fetched</span>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">Drawer A/C</span>
+                                <strong class="m-val font-mono">@_selectedCheque.MicrAccountNo.Substring(Math.Max(0, _selectedCheque.MicrAccountNo.Length - 15))</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span class="m-label">Status</span>
+                                <strong class="m-val font-bold text-dark-active">Active</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DRAWER ACCOUNT DETAILS INNER BOX -->
+                    <div class="account-group mt-3">
+                        <div class="group-title">DRAWER ACCOUNT DETAILS</div>
+                        <div class="meta-rows-list">
+                            <div class="meta-row">
+                                <span class="m-label">Name</span>
+                                <strong class="m-val">@_selectedCheque.DrawerName</strong>
+                            </div>
+                            <div class="meta-row-divider"></div>
+                            <div class="meta-row">
+                                <span class="m-label">Branch</span>
+                                <strong class="m-val">@_selectedCheque.BranchName</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SIGNATURE SPECIMEN OR PO NOTICE INNER BOX -->
+                    <div class="signature-section mt-3">
+                        @if (_selectedCheque.IsPo)
+                        {
+                            <div class="po-warning-box">
+                                PO item: signature and balance are intentionally hidden.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="signature-viewer-box">
+                                <div class="sig-header-row">
+                                    <span class="m-label">Signature Specimen</span>
+                                    <span class="sig-counter">Signature 1 of 1</span>
+                                </div>
+                                <div class="sig-img-wrap">
+                                    <img src="@_selectedCheque.SignatureImageUrl" alt="Signature Specimen" class="sig-img" />
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* BOTTOM ROW (CBS NOTICE & AUDIT TIMELINE) *@
+        <div class="tech-bottom-split-row">
+            <!-- CBS Notice Card -->
+            <div class="tech-card tech-cbs-note-card">
+                <div class="cbs-note-content">
+                    <span class="cbs-icon">◎</span>
+                    <div class="cbs-text-wrap">
+                        <strong class="cbs-title">CBS/account fetch result</strong>
+                        <p class="cbs-desc">Drawer account is derived from the last 15 digits of the MICR account number. This is demo data only; no live CBS integration is used.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Audit Timeline Card -->
+            <div class="tech-card tech-audit-card">
+                <div class="audit-card-head">
+                    <div>
+                        <h3 class="audit-card-title">Audit Timeline</h3>
+                        <span class="audit-card-count">@_auditEntries.Count audit event(s)</span>
+                    </div>
+                    <button type="button" class="tech-btn-outline-sm" @onclick="() => _showAudit = !_showAudit">
+                        <span class="btn-icon">@(_showAudit ? "⌃" : "⌄")</span> @(_showAudit ? "Close Audit" : "Show Audit")
+                    </button>
+                </div>
+                @if (_showAudit)
+                {
+                    <div class="audit-events-scroll">
+                        @foreach (var entry in _auditEntries)
+                        {
+                            <div class="audit-event-item">
+                                <div class="audit-meta-row">
+                                    <span>@entry.Timestamp - @entry.Actor</span>
+                                </div>
+                                <div class="audit-action-row">
+                                    <strong>@entry.Action</strong>
+                                </div>
+                                <div class="audit-note-row">
+                                    @entry.Note
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* BOTTOM ACTION BAR (IN-PAGE CARD) *@
+        <div class="tech-card tech-action-bar-card">
+            <button type="button" class="tech-btn-navy" @onclick='() => PromptDecision("Accept")'>
+                <span class="btn-icon">✓</span> Accept
+            </button>
+            <button type="button" class="tech-btn-outline" @onclick='() => PromptDecision("Reject")'>
+                <span class="btn-icon">✕</span> Reject
+            </button>
+            <button type="button" class="tech-btn-outline" @onclick='() => PromptDecision("Refer")'>
+                <span class="btn-icon">◁</span> Refer
+            </button>
+            <button type="button" class="tech-btn-outline" @onclick="PromptExit">
+                Exit
+            </button>
+        </div>
+    }
+</div>
+
+@* CONFIRMATION MODALS *@
+<ConfirmActionModal IsOpen="@_showConfirmModal"
+                    Title="@($"Confirm Technical Verification: {_pendingDecision}")"
+                    Message="@GetConfirmMessage()"
+                    ConfirmLabel="@(_pendingDecision == "Exit" ? "Exit" : "Confirm")"
+                    CancelLabel="Cancel"
+                    OnConfirm="ExecuteDecision"
+                    OnCancel="() => _showConfirmModal = false" />
+
+<style>
+    .tech-ver-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #0f172a;
+        background: #f8fafc;
+        min-height: calc(100vh - 80px);
+        padding: 20px 24px 40px;
+        box-sizing: border-box;
+    }
+    .tech-ver-root * { box-sizing: border-box; }
+
+    /* Top subhead */
+    .tech-top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 14px;
+    }
+    .tech-brand-title {
+        font-size: 15px;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: 3px;
+    }
+    .tech-brand-meta {
+        font-size: 12px;
+        color: #64748b;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .meta-icon { opacity: 0.85; margin-right: 3px; }
+    .tech-top-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .tech-badge-audit {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 5px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #334155;
+    }
+    .tech-badge-user {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 5px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    /* Cards */
+    .tech-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 14px;
+        box-shadow: 0 1px 3px rgba(15, 42, 68, 0.04);
+    }
+
+    /* Header Card */
+    .tech-header-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 20px;
+    }
+    .tech-header-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .tech-header-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .tech-header-title {
+        font-size: 16px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 6px 0 0;
+    }
+
+    /* Chips */
+    .tech-chip {
+        display: inline-flex;
+        align-items: center;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 9999px;
+        letter-spacing: 0.02em;
+    }
+    .chip-sla { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 700; }
+    .chip-cyan { background: #f0fdfa; color: #0d9488; border: 1px solid #ccfbf1; }
+    .chip-blue { background: #f0f9ff; color: #0284c7; border: 1px solid #e0f2fe; }
+    .chip-scanned { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-weight: 700; }
+    .chip-routing { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-weight: 700; }
+    .chip-accepted { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-weight: 700; }
+
+    /* Buttons */
+    .tech-btn-outline {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 7px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #334155;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s ease;
+    }
+    .tech-btn-outline:hover { background: #f8fafc; border-color: #94a3b8; }
+
+    .tech-btn-outline-sm {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #334155;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        transition: all 0.15s ease;
+    }
+    .tech-btn-outline-sm:hover { background: #f8fafc; border-color: #94a3b8; }
+
+    .tech-btn-navy {
+        background: #0f2a44;
+        color: #ffffff;
+        border: 1px solid #0f2a44;
+        border-radius: 7px;
+        padding: 8px 18px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.15s ease;
+    }
+    .tech-btn-navy:hover { background: #1e4e79; }
+
+    /* Summary Strip */
+    .tech-summary-strip {
+        padding: 12px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .summary-pills-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .tech-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 11px;
+    }
+    .pill-label { font-weight: 800; }
+    .pill-val { font-weight: 600; }
+
+    .pill-green { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+    .pill-blue { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+    .pill-danger { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .pill-amber { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+
+    /* Banners */
+    .tech-banner {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 14px;
+    }
+    .banner-amber { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .banner-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+    .banner-danger { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+
+    /* Filter Panel */
+    .tech-filter-panel { padding: 14px 18px; }
+    .filter-panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .filter-panel-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+    }
+    .filter-panel-count { font-size: 11px; color: #64748b; }
+    .filter-inputs-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid #f1f5f9;
+    }
+    .filter-input-col {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .filter-label {
+        font-size: 10px;
+        font-weight: 800;
+        color: #475569;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .filter-text-input {
+        height: 34px;
+        padding: 0 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 12px;
+        color: #0f172a;
+        background: #ffffff;
+        outline: none;
+    }
+    .filter-text-input:focus { border-color: #2563eb; }
+
+    /* Table */
+    .tech-table-card { padding: 0; overflow: hidden; }
+    .table-card-head {
+        padding: 14px 18px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .table-card-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+    }
+    .table-scroll-wrap {
+        width: 100%;
+        overflow-x: auto;
+    }
+    .tech-data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        text-align: left;
+    }
+    .tech-data-table th {
+        background: #f8fafc;
+        color: #475569;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 10px 14px;
+        border-bottom: 1px solid #e2e8f0;
+        white-space: nowrap;
+    }
+    .tech-data-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid #f1f5f9;
+        color: #0f172a;
+        white-space: nowrap;
+    }
+    .table-row-clickable { cursor: pointer; transition: background 0.12s ease; }
+    .table-row-clickable:hover { background: #f0fdfa; }
+    .row-selected { background: #eff6ff !important; }
+    .chevron-indicator { font-size: 16px; color: #94a3b8; font-weight: 700; }
+
+    /* Workspace 2-Column Grid */
+    .tech-workspace-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+        gap: 14px;
+        margin-top: 14px;
+    }
+    @@media (max-width: 992px) {
+        .tech-workspace-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Cheque Image Review Card */
+    .viewer-head-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 6px;
+    }
+    .viewer-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 2px 0;
+    }
+    .viewer-subtitle {
+        font-size: 11px;
+        color: #64748b;
+    }
+    .viewer-chips-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 12px;
+    }
+    .viewer-canvas-box {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .viewer-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .tab-pills {
+        display: flex;
+        gap: 6px;
+    }
+    .tab-pill {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #334155;
+        cursor: pointer;
+    }
+    .tab-active {
+        background: #0f2a44;
+        color: #ffffff;
+        border-color: #0f2a44;
+    }
+    .zoom-controls {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .zoom-btn {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        width: 24px;
+        height: 24px;
+        font-size: 14px;
+        font-weight: 700;
+        color: #334155;
+        cursor: pointer;
+    }
+    .zoom-text { font-size: 11px; font-weight: 600; color: #475569; }
+    .canvas-viewport {
+        background: #ffffff;
+        background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
+        background-size: 16px 16px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        min-height: 260px;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    .crosshair-target {
+        position: absolute;
+        width: 30px;
+        height: 30px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 50%;
+        pointer-events: none;
+    }
+    .cheque-img-display {
+        max-width: 92%;
+        max-height: 92%;
+        transition: transform 0.2s ease;
+    }
+
+    /* Decision Card & Account Card Shared */
+    .tech-viewer-card, .tech-decision-card, .tech-account-card {
+        border-left: 3px solid #cbd5e1;
+    }
+    .card-section-head {
+        margin-bottom: 14px;
+    }
+    .panel-section-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+    }
+    .decision-group, .account-group {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0;
+        overflow: hidden;
+    }
+    .group-title {
+        font-size: 10px;
+        font-weight: 800;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 12px 16px 0;
+        margin-bottom: 0;
+    }
+    .meta-rows-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+    .meta-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+        padding: 10px 16px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .meta-row:last-child {
+        border-bottom: none;
+    }
+    .meta-row-divider {
+        height: 1px;
+        background: #f1f5f9;
+        margin: 0;
+    }
+    .m-label { color: #334155; font-size: 13px; font-weight: 600; }
+    .m-val { color: #0f172a; font-size: 13px; font-weight: 600; }
+
+    .po-warning-box {
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #92400e;
+    }
+
+    .signature-viewer-box {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 14px 16px;
+    }
+    .sig-header-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    .sig-counter { font-size: 11px; color: #64748b; font-weight: 600; }
+    .sig-img-wrap {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 10px;
+        display: flex;
+        justify-content: center;
+    }
+    .sig-img { max-height: 80px; }
+
+    /* Bottom Row (CBS Note & Audit) */
+    .tech-bottom-split-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-top: 14px;
+    }
+    @@media (max-width: 992px) {
+        .tech-bottom-split-row { grid-template-columns: 1fr; }
+    }
+    .tech-cbs-note-card {
+        padding: 16px 20px;
+    }
+    .cbs-note-content {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .cbs-icon { font-size: 16px; color: #0d9488; line-height: 1.2; margin-top: 2px; }
+    .cbs-title { font-size: 13px; font-weight: 800; color: #0f172a; }
+    .cbs-desc { font-size: 12px; color: #64748b; margin: 4px 0 0 0; line-height: 1.45; }
+
+    .tech-audit-card {
+        padding: 16px 20px;
+    }
+    .audit-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+    .audit-card-title { font-size: 14px; font-weight: 800; color: #0f172a; margin: 0 0 2px 0; }
+    .audit-card-count { font-size: 11px; color: #64748b; }
+    .audit-events-scroll {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .audit-event-item {
+        background: #ffffff;
+        border-left: 2px solid #cbd5e1;
+        padding: 8px 12px;
+    }
+    .audit-meta-row { font-size: 11px; color: #64748b; }
+    .audit-action-row { font-size: 13px; color: #0f172a; margin: 2px 0; font-weight: 700; }
+    .audit-note-row { font-size: 12px; color: #475569; }
+
+    /* Action Bar Card (in-page, not fixed) */
+    .tech-action-bar-card {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 20px;
+        margin-top: 14px;
+    }
+
+    /* Helper styles */
+    .font-mono { font-family: monospace; }
+    .font-bold { font-weight: 700; }
+    .text-blue { color: #1d4ed8; }
+    .text-green { color: #166534; }
+    .text-dark-active { color: #0f172a; font-weight: 700; }
+    .text-danger { color: #b91c1c; }
+    .text-amber { color: #92400e; }
+    .text-right { text-align: right; }
+    .mt-3 { margin-top: 12px; }
+    .mb-2 { margin-bottom: 8px; }
+
+    /* Dark Mode Overrides */
+    html[data-theme="dark"] .tech-verification-root {
+        color: #f5f5f7;
+        background: #09090b;
+    }
+    html[data-theme="dark"] .tech-card {
+        background: #1c1c1e;
+        border-color: rgba(235, 235, 245, 0.15);
+    }
+    html[data-theme="dark"] .tech-brand-title,
+    html[data-theme="dark"] .tech-header-title,
+    html[data-theme="dark"] .filter-panel-title,
+    html[data-theme="dark"] .table-card-title,
+    html[data-theme="dark"] .viewer-title,
+    html[data-theme="dark"] .panel-section-title,
+    html[data-theme="dark"] .audit-card-title,
+    html[data-theme="dark"] .cbs-title,
+    html[data-theme="dark"] .tech-badge-user,
+    html[data-theme="dark"] .m-val,
+    html[data-theme="dark"] .text-dark-active,
+    html[data-theme="dark"] .audit-action-row {
+        color: #f5f5f7;
+    }
+    html[data-theme="dark"] .tech-badge-audit {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.15);
+        color: #f5f5f7;
+    }
+    html[data-theme="dark"] .tech-badge-user {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.15);
+    }
+    html[data-theme="dark"] .tech-btn-outline,
+    html[data-theme="dark"] .tech-btn-outline-sm,
+    html[data-theme="dark"] .tab-pill,
+    html[data-theme="dark"] .zoom-btn {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.18);
+        color: #f5f5f7;
+    }
+    html[data-theme="dark"] .tech-btn-outline:hover,
+    html[data-theme="dark"] .tech-btn-outline-sm:hover,
+    html[data-theme="dark"] .zoom-btn:hover {
+        background: #2c2c2e;
+    }
+    html[data-theme="dark"] .tab-active {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #ffffff;
+    }
+    html[data-theme="dark"] .filter-text-input,
+    html[data-theme="dark"] .tech-select,
+    html[data-theme="dark"] .tech-textarea {
+        background: #141416;
+        border-color: rgba(235, 235, 245, 0.2);
+        color: #f5f5f7;
+    }
+    html[data-theme="dark"] .tech-brand-meta,
+    html[data-theme="dark"] .filter-panel-count,
+    html[data-theme="dark"] .filter-label,
+    html[data-theme="dark"] .viewer-subtitle,
+    html[data-theme="dark"] .group-title,
+    html[data-theme="dark"] .m-label,
+    html[data-theme="dark"] .sig-counter,
+    html[data-theme="dark"] .cbs-desc,
+    html[data-theme="dark"] .audit-card-count,
+    html[data-theme="dark"] .audit-meta-row,
+    html[data-theme="dark"] .audit-note-row,
+    html[data-theme="dark"] .zoom-text {
+        color: #a1a1a6;
+    }
+    html[data-theme="dark"] .viewer-canvas-box,
+    html[data-theme="dark"] .decision-group,
+    html[data-theme="dark"] .account-group,
+    html[data-theme="dark"] .signature-viewer-box,
+    html[data-theme="dark"] .audit-event-item {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .canvas-viewport,
+    html[data-theme="dark"] .sig-img-wrap {
+        background: #1c1c1e;
+        border-color: rgba(235, 235, 245, 0.15);
+    }
+    html[data-theme="dark"] .table-card-head,
+    html[data-theme="dark"] .audit-card-head,
+    html[data-theme="dark"] .filter-inputs-grid,
+    html[data-theme="dark"] .meta-row,
+    html[data-theme="dark"] .meta-row-divider {
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .tech-data-table th {
+        background: #242426;
+        color: #a1a1a6;
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .tech-data-table td {
+        border-color: rgba(235, 235, 245, 0.08);
+        color: #f5f5f7;
+    }
+    html[data-theme="dark"] .table-row-clickable:hover {
+        background: rgba(255, 255, 255, 0.06);
+    }
+    html[data-theme="dark"] .row-selected {
+        background: rgba(10, 132, 255, 0.18) !important;
+    }
+</style>
+
+@code {
+    private bool _showInfo = false;
+    private bool _showSummary = false;
+    private bool _showFilters = false;
+    private bool _showAudit = true;
+    private string _activeImageTab = "front";
+    private double _zoomLevel = 1.0;
+
+    private string _filterChequeNo = "";
+    private string _filterAmount = "";
+    private string _filterMicrAccount = "";
+    private string _filterRouting = "";
+    private string _filterCustomerAccount = "";
+
+    private string _decision = "Accept";
+    private string _rejectReason = "Insufficient Funds";
+    private string _remarks = "";
+    private string? _message;
+
+    private bool _showConfirmModal = false;
+    private string _pendingDecision = "";
+
+    private List<VerificationChequeModel> _cheques = new();
+    private VerificationChequeModel? _selectedCheque;
+    private List<AuditLogEntry> _auditEntries = new();
+
+    protected override void OnInitialized()
+    {
+        _cheques = new List<VerificationChequeModel>
+        {
+            new()
+            {
+                ChequeId = "CHQ-IN-730222",
+                ChequeNo = "730222",
+                RoutingNo = "100000",
+                MicrAccountNo = "000020090455673",
+                CustomerAccountNo = "000020090455673",
+                Amount = 2750000.00m,
+                Status = "Scanned",
+                CheckDigit = "22",
+                PbDetails = "Ayeyar Demo Bank (AYDB)",
+                ChequeType = "2 / PO",
+                IsPo = true,
+                SettlementDate = "2026-08-18",
+                DrawerName = "Demo Construction",
+                BranchName = "Head Office",
+                Uic = "IN-20260818-000002",
+                FrontImageUrl = "/placeholders/cheque-front.svg",
+                BackImageUrl = "/placeholders/cheque-back.svg",
+                SignatureImageUrl = "/placeholders/signature.svg"
+            },
+            new()
+            {
+                ChequeId = "CHQ-IN-120099",
+                ChequeNo = "120099",
+                RoutingNo = "100000",
+                MicrAccountNo = "000020090455672",
+                CustomerAccountNo = "000-020-090455672",
+                Amount = 590000.00m,
+                Status = "Scanned",
+                CheckDigit = "01",
+                PbDetails = "KBZ Bank (KBZB)",
+                ChequeType = "1 / Normal",
+                IsPo = false,
+                SettlementDate = "2026-08-18",
+                DrawerName = "U Tin Win & Daw Hla",
+                BranchName = "Head Office",
+                Uic = "IN-20260818-000001",
+                FrontImageUrl = "/placeholders/cheque-front.svg",
+                BackImageUrl = "/placeholders/cheque-back.svg",
+                SignatureImageUrl = "/placeholders/signature.svg"
+            }
+        };
+
+        _selectedCheque = _cheques.FirstOrDefault();
+
+        _auditEntries = new List<AuditLogEntry>
+        {
+            new()
+            {
+                Timestamp = "8/18/2026, 12:12:03 PM",
+                Actor = "Admin One",
+                Action = "Technical Verification Accept",
+                Note = "Cheque accepted after CBS/signature review."
+            }
+        };
+    }
+
+    private List<VerificationChequeModel> FilteredCheques => _cheques.Where(c =>
+        (string.IsNullOrWhiteSpace(_filterChequeNo) || c.ChequeNo.Contains(_filterChequeNo, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterAmount) || c.Amount.ToString().Contains(_filterAmount)) &&
+        (string.IsNullOrWhiteSpace(_filterMicrAccount) || c.MicrAccountNo.Contains(_filterMicrAccount, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterRouting) || c.RoutingNo.Contains(_filterRouting, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterCustomerAccount) || c.CustomerAccountNo.Contains(_filterCustomerAccount, StringComparison.OrdinalIgnoreCase))
+    ).ToList();
+
+    private void SelectCheque(VerificationChequeModel chk)
+    {
+        _selectedCheque = chk;
+        _decision = "Accept";
+        _message = null;
+        _activeImageTab = "front";
+        _zoomLevel = 1.0;
+    }
+
+    private void RunCutoffCheck()
+    {
+        _message = "Cutoff check executed: Inward clearing window is active (Within SLA).";
+    }
+
+    private void PromptDecision(string dec)
+    {
+        _pendingDecision = dec;
+        _decision = dec;
+        if (dec != "Accept" && (string.IsNullOrWhiteSpace(_rejectReason) || string.IsNullOrWhiteSpace(_remarks)))
+        {
+            _message = $"{dec} decision requires reason and remarks before proceeding.";
+            return;
+        }
+
+        _showConfirmModal = true;
+    }
+
+    private void PromptExit()
+    {
+        _pendingDecision = "Exit";
+        _showConfirmModal = true;
+    }
+
+    private string GetConfirmMessage()
+    {
+        if (_pendingDecision == "Exit")
+            return "Exit technical verification and return to the inward dashboard?";
+
+        if (_pendingDecision == "Accept")
+            return $"Accept cheque {_selectedCheque?.ChequeNo} and route it to {(_selectedCheque?.IsPo == true ? "Return ICL Creation" : "Debit Posting")}?";
+
+        return $"{_pendingDecision} cheque {_selectedCheque?.ChequeNo} with reason \"{_rejectReason}\"?";
+    }
+
+    private void ExecuteDecision()
+    {
+        _showConfirmModal = false;
+
+        if (_pendingDecision == "Exit")
+        {
+            Navigation.NavigateTo("/inward/dashboard");
+            return;
+        }
+
+        if (_selectedCheque is not null)
+        {
+            var chk = _selectedCheque;
+            _auditEntries.Insert(0, new AuditLogEntry
+            {
+                Timestamp = $"{DateTime.Now:M/d/yyyy, h:mm:ss tt}",
+                Actor = "Admin One",
+                Action = $"Technical Verification {_pendingDecision}",
+                Note = _pendingDecision == "Accept"
+                    ? $"Cheque {chk.ChequeNo} accepted after CBS/signature review."
+                    : $"Cheque {chk.ChequeNo} marked as {_pendingDecision} ({_rejectReason}: {_remarks})."
+            });
+
+            _cheques.Remove(chk);
+            _selectedCheque = FilteredCheques.FirstOrDefault();
+            _message = $"Cheque {chk.ChequeNo} processed successfully ({_pendingDecision}).";
+            _decision = "Accept";
+            _remarks = "";
+        }
+    }
+
+    public sealed class VerificationChequeModel
+    {
+        public string ChequeId { get; set; } = string.Empty;
+        public string ChequeNo { get; set; } = string.Empty;
+        public string RoutingNo { get; set; } = string.Empty;
+        public string MicrAccountNo { get; set; } = string.Empty;
+        public string CustomerAccountNo { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string Status { get; set; } = "Scanned";
+        public string CheckDigit { get; set; } = string.Empty;
+        public string PbDetails { get; set; } = string.Empty;
+        public string ChequeType { get; set; } = "1 / Normal";
+        public bool IsPo { get; set; }
+        public string SettlementDate { get; set; } = string.Empty;
+        public string DrawerName { get; set; } = string.Empty;
+        public string BranchName { get; set; } = string.Empty;
+        public string Uic { get; set; } = string.Empty;
+        public string FrontImageUrl { get; set; } = "/placeholders/cheque-front.svg";
+        public string BackImageUrl { get; set; } = "/placeholders/cheque-back.svg";
+        public string SignatureImageUrl { get; set; } = "/placeholders/signature.svg";
+    }
+
+    public sealed class AuditLogEntry
+    {
+        public string Action { get; set; } = string.Empty;
+        public string Timestamp { get; set; } = string.Empty;
+        public string Actor { get; set; } = string.Empty;
+        public string Note { get; set; } = string.Empty;
+    }
+}

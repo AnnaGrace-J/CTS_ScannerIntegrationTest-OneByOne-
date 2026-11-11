@@ -1,0 +1,917 @@
+@page "/outward/forward-upload-response"
+@attribute [Authorize]
+@inject WorkspaceApiService Client
+@inject NavigationManager Navigation
+
+@*
+// Origin Code:
+// @page "/outward/forward-upload-response"
+// @attribute [Authorize]
+// <WorkflowWorkspace Workstep="FORWARD_UPLOAD_FILE_RESPONSE" />
+*@
+
+@* // New Code by KK *@
+<PageTitle>Clearing House Response Review · ACE CTS</PageTitle>
+
+<div class="demo-ops-root">
+    @* Top Workspace Header *@
+    <div class="demo-top-bar">
+        <div class="demo-breadcrumbs">
+            <span class="demo-bc-bold">ACE CTS Workspace</span>
+            <span class="demo-meta-text">
+                <span class="demo-icon">📅</span> Business date 2026-06-23
+                <span class="demo-icon ml-2">🏛</span> Head Office
+                <span class="demo-icon ml-2">Role:</span> ADMIN
+            </span>
+        </div>
+        <div class="demo-top-badges">
+            <span class="demo-audit-badge">Audit events: <strong>59</strong></span>
+            <span class="demo-user-badge">admin1</span>
+        </div>
+    </div>
+
+    @* Header Card with Collapsible Show/Hide Info *@
+    <div class="demo-card demo-header-card">
+        @if (_infoCollapsed)
+        {
+            @* Collapsed State: Single line bar *@
+            <div class="demo-header-collapsed-row">
+                <div class="demo-collapsed-left">
+                    <h1 class="demo-collapsed-title">Clearing House Response Review</h1>
+                    <span class="demo-chip chip-online">Online</span>
+                    <span class="demo-chip chip-cyan">BRANCH <strong>Head Office</strong></span>
+                    <span class="demo-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+                    <span class="demo-chip chip-blue">DATE <strong>2026-09-09</strong></span>
+                </div>
+                <button class="demo-ghost-btn" @onclick="() => _infoCollapsed = false">
+                    <span class="demo-icon">👁</span> Show Info
+                </button>
+            </div>
+        }
+        else
+        {
+            @* Expanded State: Full title, subtitle, badges, and Hide Info button *@
+            <div class="demo-header-full">
+                <div class="demo-header-full-top">
+                    <div>
+                        <div class="demo-sub-breadcrumbs">
+                            <span>ACE CTS Workspace</span>
+                            <span class="demo-bc-sep">/</span>
+                            <span>Outward</span>
+                            <span class="demo-bc-sep">/</span>
+                            <span class="demo-bc-current">Service Operations</span>
+                        </div>
+                        <h1 class="demo-main-title">Clearing House Response Review</h1>
+                        <p class="demo-header-subtitle">Service Operations workspace for outward clearing automation and manual response handling.</p>
+                    </div>
+                    <button class="demo-ghost-btn" @onclick="() => _infoCollapsed = true">
+                        <span class="demo-icon">👁</span> Hide Info
+                    </button>
+                </div>
+
+                <div class="demo-header-chips-row">
+                    <span class="demo-chip chip-cyan">BRANCH <strong>Head Office</strong></span>
+                    <span class="demo-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+                    <span class="demo-chip chip-blue">BUSINESS DATE <strong>2026-09-09</strong></span>
+                    <span class="demo-chip chip-gray">LAST UPDATED <strong>9/9/2026, 4:34:50 PM</strong></span>
+                    <span class="demo-chip chip-online">STATUS <strong>Online</strong></span>
+                    <span class="demo-chip chip-gray">LAST RUN TIME <strong>Not run this session</strong></span>
+                    <span class="demo-chip chip-gray">POLL INTERVAL <strong>10s</strong></span>
+                </div>
+            </div>
+        }
+    </div>
+
+    @* Service Operations Control Strip *@
+    <div class="demo-card demo-service-strip">
+        <div class="demo-service-left">
+            <div class="demo-clock-icon">🕒</div>
+            <div>
+                <strong class="demo-service-title">Service Operations Control</strong>
+                <span class="demo-service-subtitle">Last run: @_lastRunTime</span>
+            </div>
+        </div>
+        <div class="demo-service-right">
+            <button class="demo-action-btn btn-navy" disabled="@_runningTick" @onclick="RunTick">
+                <span>▶</span>
+                <span>@(_runningTick ? "Running..." : "Run Service Tick")</span>
+            </button>
+            <label class="demo-service-toggle">
+                <input type="checkbox" @bind="_autoRun" />
+                <span>Auto-run @(_autoRun ? "On" : "Off")</span>
+            </label>
+            <span class="demo-pill pill-poll">Poll 10s</span>
+            <span class="demo-pill pill-result">Last result: @_serviceResult</span>
+            <span class="demo-pill pill-error">Last error: None</span>
+        </div>
+    </div>
+
+    @* Response Search Filters with working Hide/Show Filters *@
+    <div class="demo-card demo-filter-panel">
+        <div class="demo-filter-header">
+            <div>
+                <h2 class="demo-filter-title">Response Search Filters</h2>
+                <span class="demo-filter-count">@FilteredFiles.Count matching records</span>
+            </div>
+            <button class="demo-ghost-btn" @onclick="() => _filtersCollapsed = !_filtersCollapsed">
+                <span>@(_filtersCollapsed ? "⌄" : "⌃")</span>
+                <span>@(_filtersCollapsed ? "Show Filters" : "Hide Filters")</span>
+            </button>
+        </div>
+        @if (!_filtersCollapsed)
+        {
+            <div class="demo-filter-grid">
+                <div class="demo-field">
+                    <label class="demo-label">CHEQUE NUMBER</label>
+                    <input type="text" class="demo-input" placeholder="Search cheque no..." @bind="_filterChequeNo" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">AMOUNT</label>
+                    <input type="text" class="demo-input" placeholder="Search amount..." @bind="_filterAmount" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">MICR ACCOUNT NUMBER</label>
+                    <input type="text" class="demo-input" placeholder="Search MICR account..." @bind="_filterMicrAccount" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">ROUTING NUMBER</label>
+                    <input type="text" class="demo-input" placeholder="Search routing no..." @bind="_filterRouting" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">CREDIT ACCOUNT NUMBER</label>
+                    <input type="text" class="demo-input" placeholder="Search credit account..." @bind="_filterCreditAccount" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">ICL FILE NAME</label>
+                    <input type="text" class="demo-input" placeholder="Search ICL file..." @bind="_filterFileName" @bind:event="oninput" />
+                </div>
+            </div>
+        }
+    </div>
+
+    @* Split Workspace: Files Awaiting Response & Selected File Details *@
+    <div class="demo-split-grid">
+        @* Left Side: Files Awaiting Response Table *@
+        <div class="demo-card demo-table-card">
+            <div class="demo-table-panel-header">
+                <h3 class="demo-panel-title">Files Awaiting Response</h3>
+            </div>
+            <div class="demo-table-wrapper">
+                <table class="demo-data-table">
+                    <thead>
+                        <tr>
+                            <th>ICL FILE NAME</th>
+                            <th>CHEQUE COUNT</th>
+                            <th>TOTAL AMOUNT</th>
+                            <th>STATUS</th>
+                            <th style="width: 36px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (FilteredFiles.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="5" class="demo-empty-cell">No forward upload files awaiting response.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var file in FilteredFiles)
+                            {
+                                var isSelected = _selectedFile?.FileName == file.FileName;
+                                <tr class="demo-clickable-row @(isSelected ? "row-selected" : "")" @onclick="() => SelectFile(file)">
+                                    <td class="font-bold text-blue">@file.FileName</td>
+                                    <td>@file.ChequeCount</td>
+                                    <td>@file.TotalAmount.ToString("N0")</td>
+                                    <td>
+                                        <span class="demo-tag tag-uploaded">@file.Status</span>
+                                    </td>
+                                    <td class="text-right">
+                                        <span class="demo-chevron-indicator">›</span>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @* Right Side: Selected File Details & Decisions *@
+        <div class="demo-card demo-detail-card">
+            <div class="demo-table-panel-header">
+                <h3 class="demo-panel-title">Selected File Details</h3>
+            </div>
+            <div class="demo-detail-content">
+                <div class="demo-detail-grid">
+                    @* Left Sub-col of details *@
+                    <div class="demo-meta-box">
+                        <div class="demo-detail-item">
+                            <span class="demo-detail-label">File Name</span>
+                            <strong class="demo-detail-val">@(_selectedFile?.FileName ?? "None")</strong>
+                        </div>
+                        <div class="demo-detail-item">
+                            <span class="demo-detail-label">Cheque Count</span>
+                            <strong class="demo-detail-val">@(_selectedFile?.ChequeCount ?? 0)</strong>
+                        </div>
+                        <div class="demo-detail-item">
+                            <span class="demo-detail-label">Total Amount</span>
+                            <strong class="demo-detail-val">MMK @((_selectedFile?.TotalAmount ?? 0).ToString("N0"))</strong>
+                        </div>
+                        <div class="demo-detail-item">
+                            <span class="demo-detail-label">Generated Path</span>
+                            <strong class="demo-detail-val">@(_selectedFile?.GeneratedPath ?? @"C:\CTS\Outward\Upload\")</strong>
+                        </div>
+                        <div class="demo-detail-item">
+                            <span class="demo-detail-label">Status</span>
+                            <div>
+                                <span class="demo-tag tag-uploaded">@(_selectedFile?.Status ?? "Pending")</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* Right Sub-col of details *@
+                    <div class="demo-control-box">
+                        <div class="demo-field mb-3">
+                            <label class="demo-label">FILE-LEVEL REASON</label>
+                            <select class="demo-select" @bind="_fileReason">
+                                <option value="Insufficient Funds">Insufficient Funds</option>
+                                <option value="Payment Stopped By Drawer">Payment Stopped By Drawer</option>
+                                <option value="Signature Differs / Incomplete">Signature Differs / Incomplete</option>
+                                <option value="Post-dated / Stale Cheque">Post-dated / Stale Cheque</option>
+                                <option value="Refer to Drawer">Refer to Drawer</option>
+                                <option value="Account Blocked / Frozen">Account Blocked / Frozen</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                @* Remarks & Decision Row *@
+                <div class="demo-decision-block">
+                    <div class="demo-field mb-3">
+                        <label class="demo-label">FILE-LEVEL REMARKS</label>
+                        <input type="text" class="demo-input" placeholder="Enter file-level remarks..." @bind="_fileRemarks" />
+                    </div>
+
+                    <label class="demo-checkbox-label mb-3">
+                        <input type="checkbox" @bind="_exceptionMode" />
+                        <span>Accept with Exception mode</span>
+                    </label>
+
+                    <div class="demo-actions-row">
+                        <button class="demo-action-btn btn-navy" @onclick="AcceptAll">
+                            <span>✓</span> Accept All
+                        </button>
+                        <button class="demo-action-btn btn-outline" @onclick="RejectAll">
+                            <span>✕</span> Reject All
+                        </button>
+                        <button class="demo-action-btn btn-outline" @onclick="AcceptWithException">
+                            <span>↺</span> Accept with Exception
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Per-Cheque Response Grid *@
+    <div class="demo-card demo-table-card mt-3">
+        <div class="demo-table-panel-header">
+            <h3 class="demo-panel-title">Per-Cheque Response</h3>
+        </div>
+        <div class="demo-table-wrapper">
+            <table class="demo-data-table">
+                <thead>
+                    <tr>
+                        <th>CHEQUE NO</th>
+                        <th>AMOUNT</th>
+                        <th>MICR ACCOUNT</th>
+                        <th>ROUTING</th>
+                        <th>CHEQUE STATUS</th>
+                        <th>REJECT REASON</th>
+                        <th>REMARKS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_chequeRows.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="demo-empty-cell">No cheques loaded for selected file.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var cheque in _chequeRows)
+                        {
+                            <tr>
+                                <td class="font-bold text-blue">@cheque.ChequeNo</td>
+                                <td>@cheque.Amount.ToString("N0")</td>
+                                <td class="font-mono">@cheque.MicrAccount</td>
+                                <td class="font-mono">@cheque.Routing</td>
+                                <td>
+                                    <select class="demo-select-sm" disabled="@(!_exceptionMode)" @bind="cheque.Status">
+                                        <option value="Accepted">Accepted</option>
+                                        <option value="Rejected">Rejected</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <span class="text-slate-muted">@_fileReason</span>
+                                </td>
+                                <td>
+                                    <input type="text" class="demo-input-sm" disabled="@(!_exceptionMode)" placeholder="" @bind="cheque.Remarks" />
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @* Collapsible Audit Timeline Panel *@
+    <div class="demo-card demo-pane mt-3">
+        <div class="demo-pane-header">
+            <div>
+                <h3 class="demo-pane-title">Audit Timeline</h3>
+                <span class="demo-pane-sub">8 audit event(s)</span>
+            </div>
+            <button class="demo-ghost-btn" @onclick="() => _auditOpen = !_auditOpen">
+                <span>@(_auditOpen ? "⌃" : "⌄")</span>
+                <span>@(_auditOpen ? "Close Audit" : "Open Audit")</span>
+            </button>
+        </div>
+
+        @if (_auditOpen)
+        {
+            <div class="demo-audit-events-list">
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">9/9/2026, 4:28:59 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Run Service Tick</strong>
+                    <p class="demo-audit-desc">No eligible outward service workitems found.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">9/9/2026, 3:42:20 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Run Service Tick</strong>
+                    <p class="demo-audit-desc">No eligible outward service workitems found.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:52:15 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Return ICL Upload File Generated</strong>
+                    <p class="demo-audit-desc">MMDB_RETURN_20260819_006.icl created for CBM.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:51:27 PM · Admin One</span>
+                    <strong class="demo-audit-act">Complete Inward NAK Repair</strong>
+                    <p class="demo-audit-desc">120103 returned to return ICL creation.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:51:08 PM · Admin One</span>
+                    <strong class="demo-audit-act">Complete Inward NAK Repair</strong>
+                    <p class="demo-audit-desc">120099 returned to return ICL creation.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:01:55 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Return ICL Upload File Generated</strong>
+                    <p class="demo-audit-desc">MMDB_RETURN_20260819_005.icl created for CBM.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:01:04 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Return ICL Creation</strong>
+                    <p class="demo-audit-desc">No inward return instruments ready for file creation.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:00:57 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Return ICL Creation</strong>
+                    <p class="demo-audit-desc">No inward return instruments ready for file creation.</p>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@* Self-Contained Styles matching Vercel Demo *@
+<style>
+    .demo-ops-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #172033;
+        background: #F5F7FA;
+        min-height: calc(100vh - 80px);
+        padding: 16px 24px 60px;
+        box-sizing: border-box;
+    }
+    .demo-ops-root * { box-sizing: border-box; }
+
+    .demo-top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+    }
+    .demo-breadcrumbs { font-size: 13px; color: #667085; }
+    .demo-bc-bold { font-weight: 700; color: #172033; margin-right: 12px; }
+    .demo-meta-text { font-size: 12px; color: #64748B; }
+    .demo-icon { opacity: 0.8; margin-right: 4px; }
+    .ml-2 { margin-left: 10px; }
+    .mt-3 { margin-top: 14px; }
+    .mb-3 { margin-bottom: 12px; }
+
+    .demo-top-badges { display: flex; align-items: center; gap: 8px; }
+    .demo-audit-badge, .demo-user-badge {
+        font-size: 12px;
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 4px 10px;
+        color: #172033;
+    }
+    .demo-user-badge { font-weight: 700; }
+
+    /* Cards */
+    .demo-card {
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 14px;
+        box-shadow: 0 1px 3px rgba(15, 42, 68, 0.05);
+    }
+
+    /* Header Card */
+    .demo-header-card { padding: 14px 18px; }
+    .demo-header-collapsed-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .demo-collapsed-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .demo-collapsed-title {
+        font-size: 15px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin: 0;
+        margin-right: 6px;
+    }
+
+    .demo-header-full-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }
+    .demo-sub-breadcrumbs {
+        font-size: 11px;
+        color: #64748B;
+        margin-bottom: 4px;
+    }
+    .demo-bc-sep { margin: 0 5px; opacity: 0.6; }
+    .demo-bc-current { color: #0F2A44; font-weight: 600; }
+    .demo-main-title {
+        font-size: 20px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin: 0 0 4px 0;
+        letter-spacing: -0.01em;
+    }
+    .demo-header-subtitle {
+        font-size: 12px;
+        color: #64748B;
+        margin: 0;
+    }
+
+    .demo-header-chips-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+    }
+
+    /* Chips */
+    .demo-chip {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 20px;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+    }
+    .chip-online { background: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0; }
+    .chip-cyan { background: #E0F2FE; color: #0369A1; border: 1px solid #BAE6FD; }
+    .chip-blue { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+    .chip-gray { background: #F8FAFC; color: #475569; border: 1px solid #E2E8F0; }
+
+    /* Service Operations Strip */
+    .demo-service-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 12px 18px;
+    }
+    .demo-service-left { display: flex; align-items: center; gap: 10px; }
+    .demo-clock-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #ECFDF5;
+        color: #059669;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+    }
+    .demo-service-title { display: block; font-size: 13px; font-weight: 800; color: #0F2A44; }
+    .demo-service-subtitle { display: block; font-size: 11px; color: #64748B; }
+
+    .demo-service-right { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .demo-service-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 0 10px;
+        height: 36px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #0F2A44;
+        cursor: pointer;
+    }
+
+    .demo-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 36px;
+        padding: 0 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .pill-poll { background: #F8FAFC; border: 1px solid #E2E8F0; color: #0F2A44; }
+    .pill-result { background: #ECFDF5; border: 1px solid #A7F3D0; color: #047857; }
+    .pill-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; }
+
+    /* Action Buttons */
+    .demo-action-btn {
+        height: 34px;
+        padding: 0 14px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s;
+    }
+    .btn-navy { background: #0F2A44; color: #FFFFFF; border: 1px solid #0F2A44; }
+    .btn-navy:hover { background: #1E4E79; }
+    .btn-navy:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-outline {
+        background: #FFFFFF;
+        color: #0F2A44;
+        border: 1px solid #D8DEE6;
+    }
+    .btn-outline:hover { background: #F8FAFC; border-color: #94A3B8; }
+
+    .demo-ghost-btn {
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 5px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #172033;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .demo-ghost-btn:hover { background: #F8FAFC; }
+
+    /* Filter Panel */
+    .demo-filter-panel { padding: 14px 18px; }
+    .demo-filter-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .demo-filter-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin: 0;
+    }
+    .demo-filter-count { font-size: 11px; color: #64748B; }
+
+    .demo-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid #EEF2F6;
+    }
+    .demo-field { display: flex; flex-direction: column; gap: 4px; }
+    .demo-label {
+        font-size: 10px;
+        font-weight: 800;
+        color: #475569;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+    }
+    .demo-input {
+        height: 34px;
+        padding: 0 10px;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        font-size: 12px;
+        color: #172033;
+        background: #FFFFFF;
+        outline: none;
+    }
+    .demo-input:focus { border-color: #2563EB; box-shadow: 0 0 0 2px rgba(37,99,235,0.1); }
+    .demo-input-sm {
+        height: 28px;
+        width: 100%;
+        padding: 0 8px;
+        border: 1px solid #D8DEE6;
+        border-radius: 4px;
+        font-size: 11px;
+    }
+    .demo-select {
+        height: 34px;
+        padding: 0 10px;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        font-size: 12px;
+        color: #172033;
+        background: #FFFFFF;
+        outline: none;
+        width: 100%;
+    }
+    .demo-select-sm {
+        height: 28px;
+        padding: 0 6px;
+        border: 1px solid #D8DEE6;
+        border-radius: 4px;
+        font-size: 11px;
+        color: #172033;
+        background: #FFFFFF;
+    }
+
+    /* Split Grid */
+    .demo-split-grid {
+        display: grid;
+        grid-template-columns: minmax(360px, 1fr) minmax(420px, 1.2fr);
+        gap: 14px;
+    }
+    @@media (max-width: 1024px) {
+        .demo-split-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Table Panels */
+    .demo-table-card { padding: 0; overflow: hidden; }
+    .demo-table-panel-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid #EEF2F6;
+    }
+    .demo-panel-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin: 0;
+    }
+    .demo-table-wrapper { width: 100%; overflow-x: auto; }
+    .demo-data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        text-align: left;
+    }
+    .demo-data-table th {
+        background: #F8FAFC;
+        color: #475569;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 10px 14px;
+        border-bottom: 1px solid #E2E8F0;
+        white-space: nowrap;
+    }
+    .demo-data-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid #EEF2F6;
+        color: #172033;
+        white-space: nowrap;
+    }
+    .demo-clickable-row { cursor: pointer; transition: background 0.12s; }
+    .demo-clickable-row:hover { background: #F0F7FF; }
+    .row-selected { background: #EFF6FF !important; }
+    .demo-chevron-indicator { font-size: 16px; color: #94A3B8; font-weight: 700; }
+    .demo-empty-cell { text-align: center; color: #94A3B8; padding: 28px 16px; }
+
+    /* Detail Card */
+    .demo-detail-card { padding: 0; }
+    .demo-detail-content { padding: 16px; }
+    .demo-detail-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+    @@media (max-width: 640px) {
+        .demo-detail-grid { grid-template-columns: 1fr; }
+    }
+    .demo-meta-box {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .demo-detail-item {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        font-size: 12px;
+        gap: 8px;
+    }
+    .demo-detail-label { color: #64748B; font-size: 11px; }
+    .demo-detail-val { color: #0F2A44; font-weight: 700; text-align: right; }
+
+    .demo-checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #334155;
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 6px;
+        padding: 8px 12px;
+        cursor: pointer;
+    }
+
+    .demo-actions-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+    /* Audit */
+    .demo-pane { padding: 14px 18px; }
+    .demo-pane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #EEF2F6;
+        padding-bottom: 8px;
+    }
+    .demo-pane-title { font-size: 14px; font-weight: 800; color: #0F2A44; margin: 0; }
+    .demo-pane-sub { font-size: 11px; color: #64748B; }
+
+    .demo-audit-events-list { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
+    .demo-audit-item { border-left: 2px solid #2563EB; padding-left: 10px; }
+    .demo-audit-time { font-size: 10px; color: #94A3B8; display: block; }
+    .demo-audit-act { font-size: 12px; color: #0F2A44; display: block; margin: 1px 0; }
+    .demo-audit-desc { font-size: 11px; color: #64748B; margin: 0; }
+
+    /* Tag & Utilities */
+    .demo-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+    .tag-uploaded { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+    .font-mono { font-family: monospace; }
+    .font-bold { font-weight: 700; }
+    .text-blue { color: #2563EB; }
+    .text-right { text-align: right; }
+    .text-slate-muted { color: #64748B; font-size: 11px; }
+</style>
+
+@code {
+    private bool _infoCollapsed = false;
+    private bool _filtersCollapsed = false;
+    private bool _autoRun = false;
+    private bool _runningTick = false;
+    private bool _auditOpen = true;
+    private bool _exceptionMode = false;
+
+    private string _lastRunTime = "Not run this session";
+    private string _serviceResult = "1 forward upload file(s) awaiting response.";
+
+    private string _filterChequeNo = "";
+    private string _filterAmount = "";
+    private string _filterMicrAccount = "";
+    private string _filterRouting = "";
+    private string _filterCreditAccount = "";
+    private string _filterFileName = "";
+
+    private string _fileReason = "Insufficient Funds";
+    private string _fileRemarks = "";
+
+    private List<UploadFileModel> _files = [];
+    private UploadFileModel? _selectedFile;
+    private List<ChequeRowModel> _chequeRows = [];
+
+    protected override void OnInitialized()
+    {
+        _files =
+        [
+            new()
+            {
+                FileName = "MMDB_OUT_20260818_004.icl",
+                ChequeCount = 4,
+                TotalAmount = 6985000m,
+                GeneratedPath = @"C:\CTS\Outward\Upload\",
+                Status = "Uploaded"
+            }
+        ];
+
+        _selectedFile = _files.FirstOrDefault();
+
+        _chequeRows =
+        [
+            new() { ChequeNo = "908421", Amount = 1250000m, MicrAccount = "001000245117999", Routing = "100001", Status = "Accepted", Remarks = "" },
+            new() { ChequeNo = "801122", Amount = 870000m, MicrAccount = "002009881230145", Routing = "100002", Status = "Accepted", Remarks = "" },
+            new() { ChequeNo = "801123", Amount = 1540000m, MicrAccount = "002009881230145", Routing = "100002", Status = "Accepted", Remarks = "" },
+            new() { ChequeNo = "661004", Amount = 3325000m, MicrAccount = "002010440996871", Routing = "BADRT", Status = "Accepted", Remarks = "" }
+        ];
+    }
+
+    private List<UploadFileModel> FilteredFiles => _files
+        .Where(f => string.IsNullOrWhiteSpace(_filterFileName) || f.FileName.Contains(_filterFileName, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    private void SelectFile(UploadFileModel file)
+    {
+        _selectedFile = file;
+    }
+
+    private async Task RunTick()
+    {
+        _runningTick = true;
+        await Task.Delay(350);
+        _lastRunTime = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt");
+        _serviceResult = $"{_files.Count} forward upload file(s) awaiting response.";
+        _runningTick = false;
+    }
+
+    private void AcceptAll()
+    {
+        foreach (var c in _chequeRows)
+        {
+            c.Status = "Accepted";
+        }
+        _lastRunTime = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt");
+        _serviceResult = $"All cheques in {_selectedFile?.FileName} accepted.";
+    }
+
+    private void RejectAll()
+    {
+        foreach (var c in _chequeRows)
+        {
+            c.Status = "Rejected";
+        }
+        _lastRunTime = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt");
+        _serviceResult = $"All cheques in {_selectedFile?.FileName} rejected.";
+    }
+
+    private void AcceptWithException()
+    {
+        _lastRunTime = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt");
+        _serviceResult = $"Response recorded with exceptions for {_selectedFile?.FileName}.";
+    }
+
+    private sealed class UploadFileModel
+    {
+        public string FileName { get; set; } = string.Empty;
+        public int ChequeCount { get; set; }
+        public decimal TotalAmount { get; set; }
+        public string GeneratedPath { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+    }
+
+    private sealed class ChequeRowModel
+    {
+        public string ChequeNo { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string MicrAccount { get; set; } = string.Empty;
+        public string Routing { get; set; } = string.Empty;
+        public string Status { get; set; } = "Accepted";
+        public string Remarks { get; set; } = string.Empty;
+    }
+}

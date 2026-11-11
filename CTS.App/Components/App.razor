@@ -1,0 +1,80 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f5f7" />
+    <base href="/" />
+    <ResourcePreloader />
+    <script>
+        (() => {
+            const storageKey = "cts-appearance";
+            const media = window.matchMedia("(prefers-color-scheme: dark)");
+            const readStoredTheme = () => {
+                try { return localStorage.getItem(storageKey); }
+                catch { return null; }
+            };
+            const writeStoredTheme = value => {
+                try { localStorage.setItem(storageKey, value); }
+                catch { }
+            };
+            const apply = (theme, announce = false) => {
+                const isDark = theme === "dark";
+                document.documentElement.dataset.theme = theme;
+                document.documentElement.style.colorScheme = theme;
+                document.querySelector('meta[name="theme-color"]')?.setAttribute("content", isDark ? "#09090b" : "#f5f5f7");
+                document.querySelectorAll(".theme-toggle").forEach(button => {
+                    button.setAttribute("aria-pressed", String(isDark));
+                    button.setAttribute("aria-label", `Use ${isDark ? "light" : "dark"} appearance`);
+                    button.setAttribute("title", `Use ${isDark ? "light" : "dark"} appearance`);
+                });
+                if (announce) {
+                    const status = document.getElementById("appearance-status");
+                    if (status) status.textContent = `${isDark ? "Dark" : "Light"} appearance enabled`;
+                }
+                return isDark;
+            };
+
+            const storedTheme = readStoredTheme();
+            apply(storedTheme ?? (media.matches ? "dark" : "light"));
+            window.ctsTheme = {
+                isDark: () => document.documentElement.dataset.theme === "dark",
+                toggle: () => {
+                    const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+                    writeStoredTheme(theme);
+                    return apply(theme, true);
+                },
+                syncControls: () => apply(document.documentElement.dataset.theme || "light")
+            };
+            media.addEventListener("change", event => {
+                if (!readStoredTheme()) apply(event.matches ? "dark" : "light", true);
+            });
+            document.addEventListener("DOMContentLoaded", () => window.ctsTheme.syncControls(), { once: true });
+        })();
+    </script>
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["CTS.App.styles.css"]" />
+    <ImportMap />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <HeadOutlet @rendermode="PageRenderMode" />
+</head>
+
+<body>
+    <p id="appearance-status" class="sr-only" aria-live="polite"></p>
+    <Routes @rendermode="PageRenderMode" />
+    <ReconnectModal />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private IComponentRenderMode? PageRenderMode =>
+        HttpContext.GetEndpoint()?.Metadata.GetMetadata<ExcludeFromInteractiveRoutingAttribute>() is null
+            ? InteractiveServer
+            : null;
+}

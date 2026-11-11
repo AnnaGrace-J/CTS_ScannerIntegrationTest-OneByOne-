@@ -1,0 +1,410 @@
+@page "/inward/charge-posting"
+@namespace CTS.App.Components.Pages.Inward
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject NavigationManager Navigation
+
+<PageTitle>Inward Charge Posting · Inward Clearing · ACE CTS</PageTitle>
+
+<div style="display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; min-height: 100vh; background-color: var(--background); font-size: 0.75rem;">
+
+    <!-- Operations Header & Metadata Panel -->
+    <div style="border-radius: 0.75rem; border: 1px solid var(--border); background-color: var(--surface-solid, #ffffff); padding: 1rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+            <div>
+                <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.6875rem; font-weight: 500; color: var(--text-muted); margin-bottom: 0.25rem;">
+                    <span>ACE CTS Workspace</span>
+                    <span>/</span>
+                    <span>Inward</span>
+                    <span>/</span>
+                    <span style="color: var(--text); font-weight: 600;">Inward Charge Posting</span>
+                </div>
+                <h1 style="font-size: 1.125rem; font-weight: 700; color: var(--text); margin: 0;">Inward Charge Posting</h1>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span style="display: inline-flex; align-items: center; gap: 0.25rem; border-radius: 9999px; background-color: var(--surface); padding: 0.25rem 0.625rem; font-size: 0.6875rem; font-weight: 500; color: var(--text-muted); border: 1px solid var(--border);">
+                    Audit events: <strong style="color: var(--text); font-weight: 700;">@AuditEvents.Count</strong>
+                </span>
+                <span style="border-radius: 0.5rem; background-color: var(--surface); border: 1px solid var(--border); padding: 0.25rem 0.75rem; font-size: 0.75rem; font-weight: 600; color: var(--text);">
+                    admin1
+                </span>
+                <button type="button"
+                        @onclick="ToggleInfo"
+                        style="display: inline-flex; align-items: center; gap: 0.375rem; border-radius: 0.5rem; border: 1px solid var(--border); background-color: var(--surface); padding: 0.375rem 0.75rem; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); cursor: pointer;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; min-width: 14px; min-height: 14px; display: inline-block;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                    <span>@(ShowInfo ? "Hide Info" : "Show Info")</span>
+                </button>
+            </div>
+        </div>
+
+        @if (ShowInfo)
+        {
+            <div style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0;">
+                    Generate mock charge posting files for accepted and rejected inward return responses.
+                </p>
+                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;">
+                    <span style="border-radius: 9999px; background-color: var(--surface); padding: 0.125rem 0.625rem; font-size: 0.625rem; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border);">
+                        BRANCH <strong style="color: var(--text); font-weight: 700;">Head Office</strong>
+                    </span>
+                    <span style="border-radius: 9999px; background-color: var(--surface); padding: 0.125rem 0.625rem; font-size: 0.625rem; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border);">
+                        ROLE <strong style="color: var(--text); font-weight: 700;">ADMIN</strong>
+                    </span>
+                    <span style="border-radius: 9999px; background-color: var(--surface); padding: 0.125rem 0.625rem; font-size: 0.625rem; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border);">
+                        BUSINESS DATE <strong style="color: var(--text); font-weight: 700;">@BusinessDate</strong>
+                    </span>
+                    <span style="border-radius: 9999px; background-color: var(--surface); padding: 0.125rem 0.625rem; font-size: 0.625rem; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border);">
+                        LAST UPDATED <strong style="color: var(--text); font-weight: 700;">@LastUpdatedTime</strong>
+                    </span>
+                    <span style="border-radius: 9999px; background-color: #dbeafe; color: #1e40af; padding: 0.125rem 0.625rem; font-size: 0.625rem; font-weight: 600; border: 1px solid #bfdbfe;">
+                        STATUS <strong style="color: #1e40af; font-weight: 700;">@ServiceStatus</strong>
+                    </span>
+                    <span style="border-radius: 9999px; background-color: var(--surface); padding: 0.125rem 0.625rem; font-size: 0.625rem; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border);">
+                        SERVICE STATUS <strong style="color: var(--text); font-weight: 700;">@ServiceStatus</strong>
+                    </span>
+                    <span style="border-radius: 9999px; background-color: var(--surface); padding: 0.125rem 0.625rem; font-size: 0.625rem; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border);">
+                        LAST RUN TIME <strong style="color: var(--text); font-weight: 700;">@LastRunTime</strong>
+                    </span>
+                    <span style="border-radius: 9999px; background-color: var(--surface); padding: 0.125rem 0.625rem; font-size: 0.625rem; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border);">
+                        MODE <strong style="color: var(--text); font-weight: 700;">Mock local service</strong>
+                    </span>
+                    <span style="border-radius: 9999px; background-color: var(--surface); padding: 0.125rem 0.625rem; font-size: 0.625rem; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border);">
+                        PERSISTENCE <strong style="color: var(--text); font-weight: 700;">Local state</strong>
+                    </span>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Control Bar Section: Inward Charge Posting Control -->
+    <div style="border-radius: 0.75rem; border: 1px solid var(--border); background-color: var(--surface-solid, #ffffff); padding: 0.875rem 1rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.625rem;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; min-width: 18px; min-height: 18px; color: var(--text); display: inline-block;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span style="font-size: 0.875rem; font-weight: 700; color: var(--text);">Inward Charge Posting Control</span>
+        </div>
+        <button type="button"
+                @onclick="RunChargePosting"
+                style="display: inline-flex; align-items: center; gap: 0.5rem; border-radius: 0.5rem; background-color: #0f172a; color: #ffffff; padding: 0.5rem 1rem; font-size: 0.75rem; font-weight: 600; border: none; cursor: pointer; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; min-width: 14px; min-height: 14px; display: inline-block;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span>Run Charge Posting</span>
+        </button>
+    </div>
+
+    <!-- Queue Summary Strip (4 KPI Cards) -->
+    <div style="border-radius: 0.75rem; border: 1px solid var(--border); background-color: var(--surface-solid, #ffffff); padding: 1rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: @(ShowSummary ? "1px solid var(--border)" : "none"); padding-bottom: @(ShowSummary ? "0.625rem" : "0"); margin-bottom: @(ShowSummary ? "0.75rem" : "0");">
+            <span style="font-size: 0.75rem; font-weight: 700; color: var(--text);">Summary Overview</span>
+            <button type="button"
+                    @onclick="ToggleSummary"
+                    style="display: inline-flex; align-items: center; gap: 0.375rem; border-radius: 0.5rem; border: 1px solid var(--border); background-color: var(--surface); padding: 0.375rem 0.75rem; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); cursor: pointer;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; min-width: 14px; min-height: 14px; display: inline-block; transform: @(ShowSummary ? "none" : "rotate(180deg)");"><polyline points="18 15 12 9 6 15"/></svg>
+                <span>@(ShowSummary ? "Hide Summary" : "Show Summary")</span>
+            </button>
+        </div>
+
+        @if (ShowSummary)
+        {
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+                <!-- Card 1: CHARGE QUEUE -->
+                <div style="border-radius: 0.5rem; border: 1px solid #bbf7d0; background-color: #f0fdf4; padding: 0.875rem 1rem;">
+                    <span style="font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: #166534; display: block; margin-bottom: 0.25rem;">CHARGE QUEUE</span>
+                    <span style="font-size: 1.5rem; font-weight: 800; color: #15803d; line-height: 1;">@QueueCount</span>
+                </div>
+
+                <!-- Card 2: TOTAL CHARGE AMOUNT -->
+                <div style="border-radius: 0.5rem; border: 1px solid #bfdbfe; background-color: #eff6ff; padding: 0.875rem 1rem;">
+                    <span style="font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: #1e40af; display: block; margin-bottom: 0.25rem;">TOTAL CHARGE AMOUNT</span>
+                    <span style="font-size: 1.5rem; font-weight: 800; color: #1d4ed8; line-height: 1;">@TotalChargeAmount.ToString("N2")</span>
+                </div>
+
+                <!-- Card 3: GENERATED FILES -->
+                <div style="border-radius: 0.5rem; border: 1px solid #bbf7d0; background-color: #f0fdf4; padding: 0.875rem 1rem;">
+                    <span style="font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: #166534; display: block; margin-bottom: 0.25rem;">GENERATED FILES</span>
+                    <span style="font-size: 1.5rem; font-weight: 800; color: #15803d; line-height: 1;">@Files.Count</span>
+                </div>
+
+                <!-- Card 4: TARGET -->
+                <div style="border-radius: 0.5rem; border: 1px solid #bfdbfe; background-color: #eff6ff; padding: 0.875rem 1rem;">
+                    <span style="font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: #1e40af; display: block; margin-bottom: 0.25rem;">TARGET</span>
+                    <span style="font-size: 1.25rem; font-weight: 800; color: #2563eb; line-height: 1.2;">Work Exit</span>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Charge Posting File Metadata Card -->
+    <div style="border-radius: 0.75rem; border: 1px solid var(--border); background-color: var(--surface-solid, #ffffff); padding: 1rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.625rem;">
+            <div>
+                <h2 style="font-size: 0.875rem; font-weight: 700; color: var(--text); margin: 0;">Charge Posting File</h2>
+                <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.125rem 0 0 0;">Generated file metadata and output location.</p>
+            </div>
+            <span style="border-radius: 9999px; background-color: #dbeafe; color: #1e40af; padding: 0.125rem 0.625rem; font-size: 0.625rem; font-weight: 600; border: 1px solid #bfdbfe;">
+                @(LatestFile?.Status ?? (QueueCount > 0 ? "Pending" : "Idle"))
+            </span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-top: 0.25rem;">
+            <!-- Field 1: FILE NAME -->
+            <div style="border-radius: 0.5rem; border: 1px solid var(--border); background-color: var(--surface); padding: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem;">
+                <span style="font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">FILE NAME</span>
+                <div style="font-size: 0.875rem; font-weight: 700; color: var(--text); word-break: break-all;">@(LatestFile?.FileName ?? "Not generated")</div>
+            </div>
+
+            <!-- Field 2: COUNT -->
+            <div style="border-radius: 0.5rem; border: 1px solid var(--border); background-color: var(--surface); padding: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem;">
+                <span style="font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">COUNT</span>
+                <div style="font-size: 1.125rem; font-weight: 700; color: var(--text);">@(LatestFile?.Count ?? QueueCount)</div>
+            </div>
+
+            <!-- Field 3: TOTAL CHARGE AMOUNT -->
+            <div style="border-radius: 0.5rem; border: 1px solid var(--border); background-color: var(--surface); padding: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem;">
+                <span style="font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">TOTAL CHARGE AMOUNT</span>
+                <div style="font-size: 1.125rem; font-weight: 700; color: var(--text); font-family: monospace;">@((LatestFile?.TotalAmount ?? TotalChargeAmount).ToString("N2"))</div>
+            </div>
+
+            <!-- Field 4: PATH -->
+            <div style="border-radius: 0.5rem; border: 1px solid var(--border); background-color: var(--surface); padding: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem;">
+                <span style="font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">PATH</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted); word-break: break-all;">@(LatestFile?.LocalPath ?? @"C:\CTS\Inward\ChargePosting\")</div>
+            </div>
+
+            <!-- Field 5: GENERATED TIME -->
+            <div style="border-radius: 0.5rem; border: 1px solid var(--border); background-color: var(--surface); padding: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem;">
+                <span style="font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">GENERATED TIME</span>
+                <div style="font-size: 0.75rem; font-weight: 600; color: var(--text);">@(LatestFile?.CreatedAt ?? "Pending")</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Items Awaiting Charge Posting Data Grid Card -->
+    <div style="border-radius: 0.75rem; border: 1px solid var(--border); background-color: var(--surface-solid, #ffffff); padding: 1rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.625rem;">
+            <h2 style="font-size: 0.875rem; font-weight: 700; color: var(--text); margin: 0;">Items Awaiting Charge Posting</h2>
+        </div>
+
+        <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: 0.5rem;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.75rem;">
+                <thead>
+                    <tr style="background-color: #f8fafc; border-bottom: 1px solid var(--border);">
+                        <th style="padding: 0.5rem 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.6875rem; border-right: 1px solid var(--border); white-space: nowrap;">CHEQUE NO</th>
+                        <th style="padding: 0.5rem 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.6875rem; border-right: 1px solid var(--border); white-space: nowrap;">CHEQUE AMOUNT</th>
+                        <th style="padding: 0.5rem 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.6875rem; border-right: 1px solid var(--border); white-space: nowrap;">CHARGE AMOUNT</th>
+                        <th style="padding: 0.5rem 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.6875rem; white-space: nowrap;">STATUS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Rows.Count > 0)
+                    {
+                        @foreach (var item in Rows)
+                        {
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding: 0.625rem 0.75rem; font-weight: 600; color: var(--text); font-family: monospace; border-right: 1px solid var(--border);">@item.ChequeNo</td>
+                                <td style="padding: 0.625rem 0.75rem; font-family: monospace; color: var(--text); border-right: 1px solid var(--border);">@item.Amount.ToString("N2")</td>
+                                <td style="padding: 0.625rem 0.75rem; font-family: monospace; color: var(--text); border-right: 1px solid var(--border);">@item.ChargeAmount.ToString("N2")</td>
+                                <td style="padding: 0.625rem 0.75rem;">
+                                    <span style="border-radius: 9999px; background-color: #dbeafe; color: #1e40af; padding: 0.125rem 0.5rem; font-size: 0.625rem; font-weight: 600; border: 1px solid #bfdbfe;">
+                                        @item.Status
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="4" style="padding: 2.5rem 1rem; text-align: center;">
+                                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.375rem;">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; color: var(--text-muted); opacity: 0.5; display: inline-block;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M8 15h8"/></svg>
+                                    <span style="font-size: 0.875rem; font-weight: 600; color: var(--text);">No records found</span>
+                                    <span style="font-size: 0.75rem; color: var(--text-muted); max-width: 24rem;">Adjust filters or run the relevant demo service to create workitems.</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Charge Posting Files Data Grid Card -->
+    <div style="border-radius: 0.75rem; border: 1px solid var(--border); background-color: var(--surface-solid, #ffffff); padding: 1rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="border-bottom: 1px solid var(--border); padding-bottom: 0.625rem;">
+            <h2 style="font-size: 0.875rem; font-weight: 700; color: var(--text); margin: 0;">Charge Posting Files</h2>
+        </div>
+
+        <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: 0.5rem;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.75rem;">
+                <thead>
+                    <tr style="background-color: #f8fafc; border-bottom: 1px solid var(--border);">
+                        <th style="padding: 0.5rem 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.6875rem; border-right: 1px solid var(--border); white-space: nowrap;">FILE NAME</th>
+                        <th style="padding: 0.5rem 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.6875rem; border-right: 1px solid var(--border); white-space: nowrap;">COUNT</th>
+                        <th style="padding: 0.5rem 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.6875rem; border-right: 1px solid var(--border); white-space: nowrap;">TOTAL CHARGE AMOUNT</th>
+                        <th style="padding: 0.5rem 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.6875rem; border-right: 1px solid var(--border); white-space: nowrap;">FILE PATH</th>
+                        <th style="padding: 0.5rem 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.6875rem; white-space: nowrap;">STATUS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Files.Count > 0)
+                    {
+                        @foreach (var file in Files)
+                        {
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding: 0.625rem 0.75rem; font-weight: 600; color: var(--text); font-family: monospace; border-right: 1px solid var(--border);">@file.FileName</td>
+                                <td style="padding: 0.625rem 0.75rem; color: var(--text); border-right: 1px solid var(--border);">@file.Count</td>
+                                <td style="padding: 0.625rem 0.75rem; font-family: monospace; color: var(--text); border-right: 1px solid var(--border);">@file.TotalAmount.ToString("N2")</td>
+                                <td style="padding: 0.625rem 0.75rem; color: var(--text-muted); word-break: break-all; border-right: 1px solid var(--border);">@file.LocalPath</td>
+                                <td style="padding: 0.625rem 0.75rem;">
+                                    <span style="border-radius: 9999px; background-color: #dcfce7; color: #166534; padding: 0.125rem 0.5rem; font-size: 0.625rem; font-weight: 600; border: 1px solid #bbf7d0;">
+                                        @file.Status
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="5" style="padding: 2.5rem 1rem; text-align: center;">
+                                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.375rem;">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; color: var(--text-muted); opacity: 0.5; display: inline-block;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M8 15h8"/></svg>
+                                    <span style="font-size: 0.875rem; font-weight: 600; color: var(--text);">No records found</span>
+                                    <span style="font-size: 0.75rem; color: var(--text-muted); max-width: 24rem;">Adjust filters or run the relevant demo service to create workitems.</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Audit Timeline Panel Footer -->
+    <div style="border-radius: 0.75rem; border: 1px solid var(--border); background-color: var(--surface-solid, #ffffff); padding: 1rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: @(ShowAudit ? "1px solid var(--border)" : "none"); padding-bottom: @(ShowAudit ? "0.625rem" : "0");">
+            <div>
+                <h2 style="font-size: 0.75rem; font-weight: 700; color: var(--text); margin: 0;">Audit Timeline</h2>
+                <p style="font-size: 0.6875rem; color: var(--text-muted); margin: 0.125rem 0 0 0;">@AuditEvents.Count audit event(s)</p>
+            </div>
+            <button type="button"
+                    @onclick="ToggleAudit"
+                    style="display: inline-flex; align-items: center; gap: 0.375rem; border-radius: 0.5rem; border: 1px solid var(--border); background-color: var(--surface); padding: 0.375rem 0.75rem; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); cursor: pointer;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; min-width: 14px; min-height: 14px; display: inline-block; transform: @(ShowAudit ? "none" : "rotate(180deg)");"><polyline points="18 15 12 9 6 15"/></svg>
+                <span>@(ShowAudit ? "Close Audit" : "Show Audit")</span>
+            </button>
+        </div>
+
+        @if (ShowAudit)
+        {
+            @if (AuditEvents.Count > 0)
+            {
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 200px; overflow-y: auto;">
+                    @foreach (var ev in AuditEvents)
+                    {
+                        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 0.375rem; font-size: 0.6875rem;">
+                            <div>
+                                <strong style="color: var(--text);">@ev.Action</strong>
+                                <span style="color: var(--text-muted); margin-left: 0.5rem;">@ev.Details</span>
+                            </div>
+                            <div style="color: var(--text-muted); font-size: 0.625rem;">
+                                <span>@ev.User</span> &bull; <span>@ev.Timestamp</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0; font-style: italic;">No audit events logged yet.</p>
+            }
+        }
+    </div>
+
+</div>
+
+@code {
+    private bool ShowInfo { get; set; } = true;
+    private bool ShowSummary { get; set; } = true;
+    private bool ShowAudit { get; set; } = false;
+
+    private string BusinessDate { get; set; } = "2026-09-14";
+    private string LastUpdatedTime { get; set; } = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt");
+    private string ServiceStatus { get; set; } = "Idle";
+    private string LastRunTime { get; set; } = "Not run in this session";
+
+    private int QueueCount => Rows.Count;
+    private decimal TotalChargeAmount => Rows.Sum(r => r.ChargeAmount);
+
+    private PostingFile? LatestFile => Files.FirstOrDefault();
+
+    private List<ChequeItem> Rows { get; set; } = new();
+    private List<PostingFile> Files { get; set; } = new();
+    private List<AuditEventItem> AuditEvents { get; set; } = new();
+
+    protected override void OnInitialized()
+    {
+    }
+
+    private void ToggleInfo() => ShowInfo = !ShowInfo;
+    private void ToggleSummary() => ShowSummary = !ShowSummary;
+    private void ToggleAudit() => ShowAudit = !ShowAudit;
+
+    private void RunChargePosting()
+    {
+        var runTimeStr = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt");
+        LastRunTime = runTimeStr;
+
+        int postedCount = Rows.Count > 0 ? Rows.Count : 0;
+        decimal totalAmount = Rows.Count > 0 ? Rows.Sum(r => r.ChargeAmount) : 0m;
+
+        var newFile = new PostingFile
+        {
+            FileName = $"INWARD_CHARGE_POSTING_{DateTime.Now:yyyyMMdd_HHmmss}.txt",
+            Count = postedCount,
+            TotalAmount = totalAmount,
+            LocalPath = @"C:\CTS\Inward\ChargePosting\",
+            CreatedAt = runTimeStr,
+            Status = "Generated"
+        };
+
+        Files.Insert(0, newFile);
+
+        AuditEvents.Insert(0, new AuditEventItem
+        {
+            Timestamp = runTimeStr,
+            User = "admin1",
+            Action = "Inward Charge Posting",
+            Details = $"Generated posting file {newFile.FileName} with {postedCount} item(s)."
+        });
+
+        Rows.Clear();
+        ServiceStatus = "Idle";
+    }
+
+    public class ChequeItem
+    {
+        public string ChequeNo { get; set; } = "";
+        public decimal Amount { get; set; }
+        public decimal ChargeAmount { get; set; } = 1000m;
+        public string Status { get; set; } = "Ready to post";
+    }
+
+    public class PostingFile
+    {
+        public string FileName { get; set; } = "";
+        public int Count { get; set; }
+        public decimal TotalAmount { get; set; }
+        public string LocalPath { get; set; } = @"C:\CTS\Inward\ChargePosting\";
+        public string CreatedAt { get; set; } = "";
+        public string Status { get; set; } = "Completed";
+    }
+
+    public class AuditEventItem
+    {
+        public string Timestamp { get; set; } = "";
+        public string User { get; set; } = "";
+        public string Action { get; set; } = "";
+        public string Details { get; set; } = "";
+    }
+}

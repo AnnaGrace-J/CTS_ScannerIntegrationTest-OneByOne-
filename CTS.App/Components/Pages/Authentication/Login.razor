@@ -1,0 +1,90 @@
+@page "/login"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@inject AuthenticationApiService AuthenticationClient
+@inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Navigation
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+
+<PageTitle>Sign in · ACE CTS</PageTitle>
+
+<section class="login-split">
+    <div class="login-visual">
+        <div class="login-brand"><span class="brand-mark large">ACE</span><div><strong>CTS Workspace</strong><span>Cheque Truncation System</span></div></div>
+        <div class="login-message">
+            <span class="eyebrow light">SECURE CLEARING OPERATIONS</span>
+            <h1>Process every cheque with confidence.</h1>
+            <p>A single workspace for outward capture, inward verification, clearing files, posting and audit control.</p>
+            <div class="login-flow"><span>Capture</span><i></i><span>Verify</span><i></i><span>Clear</span><i></i><span>Post</span></div>
+        </div>
+        <div class="security-note">Protected session · Role-based access · Complete audit trail</div>
+    </div>
+    <div class="login-form-panel">
+        <div class="login-form-card">
+            <span class="eyebrow">WELCOME BACK</span>
+            <h2>Sign in to CTS</h2>
+            <p>Enter your bank operations credentials to continue.</p>
+            @if (!string.IsNullOrWhiteSpace(_notice)) { <div class="alert success" role="status">@_notice</div> }
+            @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert danger" role="alert">@_error</div> }
+            <EditForm Model="Model" method="post" FormName="login" OnValidSubmit="SubmitAsync" autocomplete="off">
+                <DataAnnotationsValidator />
+                <div class="form-field"><label for="loginId">Login ID</label><InputText id="loginId" @bind-Value="Model!.LoginId" autocomplete="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true" /><ValidationMessage For="() => Model!.LoginId" /></div>
+                <div class="form-field"><label for="password">Password</label><InputText id="password" type="password" @bind-Value="Model!.Password" autocomplete="off" data-lpignore="true" data-1p-ignore="true" /><ValidationMessage For="() => Model!.Password" /></div>
+                <label class="check-row"><InputCheckbox @bind-Value="Model!.RememberMe" /> Keep me signed in on this device</label>
+                <button class="primary-button wide" type="submit" disabled="@_submitting">@(_submitting ? "Signing in..." : "Sign in securely")</button>
+            </EditForm>
+            <div class="demo-credentials"><strong>Demo credentials</strong><span>maker1 / checker1 / inwardmaker1 / inwardchecker1 / admin1</span><span>Password: <code>password</code></span></div>
+        </div>
+    </div>
+</section>
+
+@code {
+    [SupplyParameterFromForm] private LoginFormModel? Model { get; set; }
+    [SupplyParameterFromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
+    [SupplyParameterFromQuery(Name = "reason")] public string? Reason { get; set; }
+    private string? _error;
+    private string? _notice;
+    private bool _submitting;
+
+    protected override void OnInitialized()
+    {
+        Model ??= new();
+        if (string.Equals(Reason, "session-expired", StringComparison.OrdinalIgnoreCase))
+            _error = "Your session has expired. Please sign in again.";
+        if (string.Equals(Reason, "password-changed", StringComparison.OrdinalIgnoreCase))
+            _notice = "Password changed successfully. Sign in again with your new password.";
+        if (HttpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated == true) Navigation.NavigateTo("/outward/dashboard");
+    }
+
+    private async Task SubmitAsync()
+    {
+        _submitting = true;
+        var result = await AuthenticationClient.LoginAsync(new(Model!.LoginId, Model.Password, Model.RememberMe));
+        if (!result.IsSuccess || result.Data is null) { _error = result.Message; _submitting = false; return; }
+        var data = result.Data;
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, data.User.UserId.ToString()), new(ClaimTypes.Name, data.User.UserName),
+            new(ClaimTypes.GivenName, data.User.FullName), new(ClaimTypes.Role, data.User.Role),
+            new("branch_code", data.User.BranchCode), new("branch_name", data.User.BranchName), new("access_token", data.AccessToken),
+            new("password_change_required", data.User.RequiresPasswordChange.ToString().ToLowerInvariant())
+        };
+        claims.AddRange(data.User.AllowedRoutes.Select(route => new Claim("allowed_route", route)));
+        claims.AddRange(data.User.Permissions.Select(permission => new Claim("permission", permission)));
+        var properties = new AuthenticationProperties { IsPersistent = Model.RememberMe, ExpiresUtc = data.ExpiresAtUtc };
+        await HttpContextAccessor.HttpContext!.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme)), properties);
+        var target = !string.IsNullOrWhiteSpace(ReturnUrl) && ReturnUrl.StartsWith('/') && !ReturnUrl.StartsWith("//") ? ReturnUrl : data.LandingRoute;
+        Navigation.NavigateTo(target, forceLoad: true);
+    }
+
+    private sealed class LoginFormModel
+    {
+        [Required] public string LoginId { get; set; } = string.Empty;
+        [Required] public string Password { get; set; } = string.Empty;
+        public bool RememberMe { get; set; }
+    }
+}

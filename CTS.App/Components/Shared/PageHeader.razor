@@ -1,0 +1,19 @@
+<header class="page-header">
+    <div>
+        <div class="breadcrumbs">ACE CTS Workspace <span>/</span> @Section</div>
+        <h1>@Title</h1>
+        @if (!string.IsNullOrWhiteSpace(Subtitle)) { <p>@Subtitle</p> }
+    </div>
+    <div class="page-header-meta">
+        @if (!string.IsNullOrWhiteSpace(Badge)) { <span class="header-badge">@Badge</span> }
+        @ChildContent
+    </div>
+</header>
+
+@code {
+    [Parameter, EditorRequired] public string Section { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? Badge { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

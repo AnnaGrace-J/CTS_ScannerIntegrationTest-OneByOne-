@@ -1,0 +1,915 @@
+@page "/inward/debit-posting"
+@attribute [Authorize]
+@inject NavigationManager Navigation
+
+<PageTitle>Debit Posting · ACE CTS</PageTitle>
+
+<div class="dp-root">
+    @* TOP WORKSPACE SUBHEADER *@
+    <div class="dp-top-bar">
+        <div class="dp-top-left">
+            <div class="dp-brand-title">ACE CTS Workspace</div>
+            <div class="dp-brand-meta">
+                <span><span class="meta-icon">🗓</span> Business date 2026-06-23</span>
+                <span><span class="meta-icon">🏛</span> Head Office</span>
+                <span>Role: ADMIN</span>
+            </div>
+        </div>
+        <div class="dp-top-right">
+            <span class="dp-badge-audit">Audit events: @(_auditEntries.Count > 0 ? _auditEntries.Count : 51)</span>
+            <span class="dp-badge-user">admin1</span>
+        </div>
+    </div>
+
+    @* HEADER CARD *@
+    <div class="dp-card dp-header-card">
+        <div class="dp-header-left">
+            <h1 class="dp-header-title">Debit Posting Service</h1>
+            <span class="dp-chip chip-idle">Idle</span>
+            <span class="dp-chip chip-cyan">BRANCH <strong>Head Office</strong></span>
+            <span class="dp-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+            <span class="dp-chip chip-blue">DATE <strong>2026-09-14</strong></span>
+        </div>
+        <div class="dp-header-right">
+            <button type="button" class="dp-btn-outline" @onclick="() => _showInfo = !_showInfo">
+                <span class="btn-icon">👁</span> @(_showInfo ? "Hide Info" : "Show Info")
+            </button>
+        </div>
+    </div>
+
+    @if (_showInfo)
+    {
+        <div class="dp-card dp-info-drawer">
+            <div class="dp-info-grid">
+                <div>
+                    <span class="info-label">Queue Items</span>
+                    <strong class="info-val">@_queueCheques.Count item(s) awaiting debit posting</strong>
+                </div>
+                <div>
+                    <span class="info-label">Generated Files</span>
+                    <strong class="info-val font-mono">@_postingFiles.Count file(s)</strong>
+                </div>
+                <div>
+                    <span class="info-label">Service Mode</span>
+                    <strong class="info-val">CBS Mock (Background Service)</strong>
+                </div>
+                <div>
+                    <span class="info-label">Posting Path</span>
+                    <strong class="info-val font-mono">C:\CTS\Inward\Posting\</strong>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* SERVICE CONTROL BANNER *@
+    <div class="dp-card dp-service-control-card">
+        <div class="dp-service-left">
+            <div class="dp-service-icon">◎</div>
+            <div>
+                <strong class="dp-service-title">Debit Posting Service Control</strong>
+                <div class="dp-service-subtitle">Last run: @_lastRunTime</div>
+            </div>
+        </div>
+        <button type="button" class="dp-btn-navy" @onclick="RunService">
+            <span class="btn-icon">▶</span> Run Service
+        </button>
+    </div>
+
+    @* SUMMARY STRIP *@
+    <div class="dp-card dp-summary-strip">
+        <div class="summary-pills-left">
+            <span class="dp-pill pill-blue">
+                <span class="pill-label">POSTING QUEUE</span>
+                <span class="pill-val">@_queueCheques.Count</span>
+            </span>
+            <span class="dp-pill pill-blue">
+                <span class="pill-label">QUEUE AMOUNT</span>
+                <span class="pill-val">@_queueCheques.Sum(c => c.Amount).ToString("N0")</span>
+            </span>
+            <span class="dp-pill pill-green">
+                <span class="pill-label">GENERATED FILES</span>
+                <span class="pill-val">@_postingFiles.Count</span>
+            </span>
+            <span class="dp-pill pill-dark">
+                <span class="pill-label">NEXT WORKSTEP</span>
+                <span class="pill-val">Manual Return Maker</span>
+            </span>
+        </div>
+        <div class="summary-btn-right">
+            <button type="button" class="dp-btn-outline-sm" @onclick="() => _showSummary = !_showSummary">
+                <span class="btn-icon">👁</span> @(_showSummary ? "Hide Summary" : "Show Summary")
+            </button>
+        </div>
+    </div>
+
+    @if (_showSummary)
+    {
+        <div class="dp-card dp-summary-drawer">
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <span class="m-label">Posting Queue</span>
+                    <strong class="m-val text-blue">@_queueCheques.Count</strong>
+                </div>
+                <div class="metric-box">
+                    <span class="m-label">Queue Amount</span>
+                    <strong class="m-val text-blue">@_queueCheques.Sum(c => c.Amount).ToString("N2")</strong>
+                </div>
+                <div class="metric-box">
+                    <span class="m-label">Generated Files</span>
+                    <strong class="m-val text-green">@_postingFiles.Count</strong>
+                </div>
+                <div class="metric-box">
+                    <span class="m-label">Total Posted Amount</span>
+                    <strong class="m-val text-green">@_postingFiles.Sum(f => f.Amount).ToString("N2")</strong>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* NOTICE BANNER *@
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="dp-banner banner-info">
+            <span class="banner-icon">ℹ</span>
+            <span>@_message</span>
+        </div>
+    }
+
+    @* POSTING FILE STATUS CARD *@
+    <div class="dp-card dp-file-status-card">
+        <div class="dp-file-status-header">
+            <div>
+                <h2 class="dp-section-title">Posting File Status</h2>
+                <span class="dp-section-subtitle">Generated file metadata for the CBS mock handoff.</span>
+            </div>
+            @if (_latestFile is not null)
+            {
+                <span class="status-chip chip-@(_latestFile.Status.ToLower())">@_latestFile.Status</span>
+            }
+        </div>
+
+        @if (_latestFile is not null)
+        {
+            <div class="dp-file-meta-grid">
+                <div class="dp-meta-box">
+                    <span class="meta-box-label">FILE NAME</span>
+                    <strong class="meta-box-value font-mono">@_latestFile.FileName</strong>
+                </div>
+                <div class="dp-meta-box">
+                    <span class="meta-box-label">COUNT</span>
+                    <strong class="meta-box-value font-mono dp-large-val">@_latestFile.Count</strong>
+                </div>
+                <div class="dp-meta-box">
+                    <span class="meta-box-label">AMOUNT</span>
+                    <strong class="meta-box-value font-mono dp-large-val">@_latestFile.Amount.ToString("N2")</strong>
+                </div>
+            </div>
+            <div class="dp-file-meta-grid mt-2">
+                <div class="dp-meta-box">
+                    <span class="meta-box-label">PATH</span>
+                    <strong class="meta-box-value font-mono">@_latestFile.Path</strong>
+                </div>
+                <div class="dp-meta-box">
+                    <span class="meta-box-label">GENERATED TIME</span>
+                    <strong class="meta-box-value font-mono">@_latestFile.GeneratedTime</strong>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="dp-empty-file-status">
+                <span class="empty-icon">📄</span>
+                <p class="empty-desc">No posting files generated yet. Run the service to generate debit posting files.</p>
+            </div>
+        }
+    </div>
+
+    @* ACCEPTED INWARD CHEQUES AWAITING DEBIT POSTING TABLE *@
+    <div class="dp-card dp-table-card">
+        <div class="table-card-head">
+            <h2 class="table-card-title">Accepted Inward Cheques Awaiting Debit Posting</h2>
+        </div>
+        <div class="table-scroll-wrap">
+            <table class="dp-data-table">
+                <thead>
+                    <tr>
+                        <th>CHEQUE NO</th>
+                        <th>CUSTOMER ACCOUNT</th>
+                        <th>AMOUNT</th>
+                        <th>STATUS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_queueCheques.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="4" class="table-empty-cell">
+                                <div class="empty-state-box">
+                                    <span class="empty-icon">📋</span>
+                                    <strong class="empty-title">No records found</strong>
+                                    <p class="empty-desc">Adjust filters or run the relevant demo service to create workitems.</p>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var chk in _queueCheques)
+                        {
+                            <tr class="table-row-data">
+                                <td class="font-mono font-bold text-blue">@chk.ChequeNo</td>
+                                <td class="font-mono">@chk.CustomerAccount</td>
+                                <td class="font-bold font-mono">@chk.Amount.ToString("N2")</td>
+                                <td>
+                                    <span class="status-chip chip-@(chk.Status.ToLower().Replace(" ", "-"))">@chk.Status</span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @* DEBIT POSTING FILES TABLE *@
+    <div class="dp-card dp-table-card">
+        <div class="table-card-head">
+            <h2 class="table-card-title">Debit Posting Files</h2>
+        </div>
+        <div class="table-scroll-wrap">
+            <table class="dp-data-table">
+                <thead>
+                    <tr>
+                        <th>POSTING FILE NAME</th>
+                        <th>COUNT</th>
+                        <th>AMOUNT</th>
+                        <th>PATH</th>
+                        <th>GENERATED TIME</th>
+                        <th>STATUS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_postingFiles.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6" class="table-empty-cell">
+                                <div class="empty-state-box">
+                                    <span class="empty-icon">📋</span>
+                                    <strong class="empty-title">No posting files generated</strong>
+                                    <p class="empty-desc">Run the debit posting service to generate posting files.</p>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var file in _postingFiles)
+                        {
+                            <tr class="table-row-data">
+                                <td class="font-mono">@file.FileName</td>
+                                <td class="font-mono">@file.Count</td>
+                                <td class="font-bold font-mono">@file.Amount.ToString("N2")</td>
+                                <td class="font-mono">@file.Path</td>
+                                <td class="font-mono">@file.GeneratedTime</td>
+                                <td>
+                                    <span class="status-chip chip-@(file.Status.ToLower())">@file.Status</span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @* AUDIT TIMELINE CARD *@
+    <div class="dp-card dp-audit-card">
+        <div class="audit-card-head">
+            <div>
+                <h3 class="audit-card-title">Audit Timeline</h3>
+                <span class="audit-card-count">@_auditEntries.Count audit event(s)</span>
+            </div>
+            <button type="button" class="dp-btn-outline-sm" @onclick="() => _showAudit = !_showAudit">
+                <span class="btn-icon">@(_showAudit ? "⌃" : "⌄")</span> @(_showAudit ? "Close Audit" : "Show Audit")
+            </button>
+        </div>
+        @if (_showAudit)
+        {
+            <div class="audit-events-scroll">
+                @foreach (var entry in _auditEntries)
+                {
+                    <div class="audit-event-item">
+                        <div class="audit-meta-row">
+                            <span>@entry.Timestamp - @entry.Actor</span>
+                        </div>
+                        <div class="audit-action-row">
+                            <strong>@entry.Action</strong>
+                        </div>
+                        <div class="audit-note-row">
+                            @entry.Note
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .dp-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #0f172a;
+        background: #f8fafc;
+        min-height: calc(100vh - 80px);
+        padding: 20px 24px 40px;
+        box-sizing: border-box;
+    }
+    .dp-root * { box-sizing: border-box; }
+
+    /* Top subhead */
+    .dp-top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+    .dp-brand-title {
+        font-size: 15px;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: 2px;
+    }
+    .dp-brand-meta {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 12px;
+        color: #64748b;
+    }
+    .meta-icon { margin-right: 2px; }
+    .dp-top-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .dp-badge-audit {
+        background: #f0f9ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 6px;
+        padding: 5px 12px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #1d4ed8;
+    }
+    .dp-badge-user {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 5px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    /* Cards */
+    .dp-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 14px;
+        box-shadow: 0 1px 3px rgba(15, 42, 68, 0.04);
+    }
+
+    /* Header Card */
+    .dp-header-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 20px;
+    }
+    .dp-header-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .dp-header-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .dp-header-title {
+        font-size: 16px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 6px 0 0;
+    }
+
+    /* Chips */
+    .dp-chip {
+        display: inline-flex;
+        align-items: center;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 9999px;
+        letter-spacing: 0.02em;
+    }
+    .chip-idle { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 700; }
+    .chip-cyan { background: #f0fdfa; color: #0d9488; border: 1px solid #ccfbf1; }
+    .chip-blue { background: #f0f9ff; color: #0284c7; border: 1px solid #e0f2fe; }
+
+    /* Status chips */
+    .status-chip {
+        display: inline-flex;
+        align-items: center;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 9999px;
+        letter-spacing: 0.02em;
+    }
+    .chip-posted { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    .chip-generated { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+    .chip-pending { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+    .chip-accepted { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+
+    /* Buttons */
+    .dp-btn-outline {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 7px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #334155;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s ease;
+    }
+    .dp-btn-outline:hover { background: #f8fafc; border-color: #94a3b8; }
+
+    .dp-btn-outline-sm {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #334155;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        transition: all 0.15s ease;
+    }
+    .dp-btn-outline-sm:hover { background: #f8fafc; border-color: #94a3b8; }
+
+    .dp-btn-navy {
+        background: #0f2a44;
+        color: #ffffff;
+        border: 1px solid #0f2a44;
+        border-radius: 7px;
+        padding: 8px 18px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.15s ease;
+    }
+    .dp-btn-navy:hover { background: #1e4e79; }
+
+    /* Info Drawer */
+    .dp-info-drawer { padding: 14px 20px; }
+    .dp-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+    }
+    .info-label { font-size: 11px; color: #64748b; display: block; margin-bottom: 2px; }
+    .info-val { font-size: 13px; color: #0f172a; display: block; }
+
+    /* Service Control Card */
+    .dp-service-control-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 20px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+    }
+    .dp-service-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .dp-service-icon {
+        font-size: 18px;
+        color: #0d9488;
+    }
+    .dp-service-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .dp-service-subtitle {
+        font-size: 12px;
+        color: #64748b;
+        margin-top: 1px;
+    }
+
+    /* Summary Strip */
+    .dp-summary-strip {
+        padding: 12px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .summary-pills-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .dp-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 11px;
+    }
+    .pill-label { font-weight: 800; }
+    .pill-val { font-weight: 600; }
+    .pill-blue { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+    .pill-green { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+    .pill-dark { background: #f1f5f9; border: 1px solid #e2e8f0; color: #334155; }
+
+    /* Summary Drawer */
+    .dp-summary-drawer { padding: 14px 20px; }
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px;
+    }
+    .metric-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px 14px;
+    }
+    .m-label { color: #64748b; font-size: 12px; display: block; margin-bottom: 4px; }
+    .m-val { color: #0f172a; font-size: 14px; display: block; }
+
+    /* Banners */
+    .dp-banner {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 14px;
+    }
+    .banner-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+
+    /* Posting File Status Card */
+    .dp-file-status-card {
+        padding: 18px 22px;
+    }
+    .dp-file-status-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+    .dp-section-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 3px 0;
+    }
+    .dp-section-subtitle {
+        font-size: 12px;
+        color: #64748b;
+    }
+    .dp-file-meta-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+    }
+    .dp-meta-box {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px 16px;
+    }
+    .meta-box-label {
+        font-size: 10px;
+        font-weight: 800;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: block;
+        margin-bottom: 6px;
+    }
+    .meta-box-value {
+        font-size: 13px;
+        color: #0f172a;
+        display: block;
+    }
+    .dp-large-val {
+        font-size: 18px;
+        font-weight: 800;
+    }
+    .dp-empty-file-status {
+        text-align: center;
+        padding: 24px 0;
+    }
+
+    /* Table Card */
+    .dp-table-card { padding: 0; overflow: hidden; }
+    .table-card-head {
+        padding: 14px 20px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .table-card-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+    }
+    .table-scroll-wrap {
+        width: 100%;
+        overflow-x: auto;
+    }
+    .dp-data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        text-align: left;
+    }
+    .dp-data-table th {
+        background: #f8fafc;
+        color: #475569;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 10px 14px;
+        border-bottom: 1px solid #e2e8f0;
+        white-space: nowrap;
+    }
+    .dp-data-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid #f1f5f9;
+        color: #0f172a;
+        white-space: nowrap;
+    }
+    .table-row-data { transition: background 0.12s ease; }
+    .table-row-data:hover { background: #f8fafc; }
+
+    /* Empty State */
+    .table-empty-cell { padding: 0 !important; border: none !important; }
+    .empty-state-box {
+        text-align: center;
+        padding: 32px 16px;
+    }
+    .empty-icon { font-size: 32px; display: block; margin-bottom: 8px; opacity: 0.5; }
+    .empty-title { font-size: 14px; color: #334155; display: block; margin-bottom: 4px; }
+    .empty-desc { font-size: 12px; color: #94a3b8; margin: 0; }
+
+    /* Audit Timeline Card */
+    .dp-audit-card {
+        padding: 16px 20px;
+    }
+    .audit-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+    .audit-card-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 2px 0;
+    }
+    .audit-card-count { font-size: 11px; color: #64748b; }
+    .audit-events-scroll {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .audit-event-item {
+        background: #ffffff;
+        border-left: 2px solid #cbd5e1;
+        padding: 8px 12px;
+    }
+    .audit-meta-row { font-size: 11px; color: #64748b; }
+    .audit-action-row { font-size: 13px; color: #0f172a; margin: 2px 0; font-weight: 700; }
+    .audit-note-row { font-size: 12px; color: #475569; }
+
+    /* Helper styles */
+    .font-mono { font-family: monospace; }
+    .font-bold { font-weight: 700; }
+    .text-blue { color: #1d4ed8; }
+    .text-green { color: #166534; }
+    .text-danger { color: #b91c1c; }
+    .text-amber { color: #92400e; }
+    .mt-2 { margin-top: 12px; }
+
+    @@media (max-width: 768px) {
+        .dp-file-meta-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Dark Mode Overrides */
+    html[data-theme="dark"] .dp-root {
+        color: #f5f5f7;
+        background: #09090b;
+    }
+    html[data-theme="dark"] .dp-card {
+        background: #1c1c1e;
+        border-color: rgba(235, 235, 245, 0.15);
+    }
+    html[data-theme="dark"] .dp-brand-title,
+    html[data-theme="dark"] .dp-header-title,
+    html[data-theme="dark"] .dp-section-title,
+    html[data-theme="dark"] .table-card-title,
+    html[data-theme="dark"] .audit-card-title,
+    html[data-theme="dark"] .dp-service-title,
+    html[data-theme="dark"] .dp-badge-user,
+    html[data-theme="dark"] .meta-box-value,
+    html[data-theme="dark"] .m-val,
+    html[data-theme="dark"] .info-val,
+    html[data-theme="dark"] .audit-action-row {
+        color: #f5f5f7;
+    }
+    html[data-theme="dark"] .dp-badge-audit {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.15);
+        color: #60a5fa;
+    }
+    html[data-theme="dark"] .dp-badge-user {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.15);
+    }
+    html[data-theme="dark"] .dp-btn-outline,
+    html[data-theme="dark"] .dp-btn-outline-sm {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.18);
+        color: #f5f5f7;
+    }
+    html[data-theme="dark"] .dp-btn-outline:hover,
+    html[data-theme="dark"] .dp-btn-outline-sm:hover {
+        background: #2c2c2e;
+    }
+    html[data-theme="dark"] .dp-brand-meta,
+    html[data-theme="dark"] .dp-section-subtitle,
+    html[data-theme="dark"] .dp-service-subtitle,
+    html[data-theme="dark"] .meta-box-label,
+    html[data-theme="dark"] .m-label,
+    html[data-theme="dark"] .info-label,
+    html[data-theme="dark"] .audit-card-count,
+    html[data-theme="dark"] .audit-meta-row,
+    html[data-theme="dark"] .audit-note-row,
+    html[data-theme="dark"] .empty-title,
+    html[data-theme="dark"] .empty-desc {
+        color: #a1a1a6;
+    }
+    html[data-theme="dark"] .dp-service-control-card,
+    html[data-theme="dark"] .metric-box,
+    html[data-theme="dark"] .dp-meta-box,
+    html[data-theme="dark"] .audit-event-item {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .table-card-head,
+    html[data-theme="dark"] .audit-card-head {
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .dp-data-table th {
+        background: #242426;
+        color: #a1a1a6;
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .dp-data-table td {
+        border-color: rgba(235, 235, 245, 0.08);
+        color: #f5f5f7;
+    }
+    html[data-theme="dark"] .table-row-data:hover {
+        background: rgba(255, 255, 255, 0.06);
+    }
+</style>
+
+@code {
+    private bool _showInfo = false;
+    private bool _showSummary = false;
+    private bool _showAudit = true;
+    private string? _message;
+    private string _lastRunTime = "8/18/2026, 12:12:19 PM";
+
+    private List<QueueChequeModel> _queueCheques = new();
+    private List<PostingFileModel> _postingFiles = new();
+    private List<AuditLogEntry> _auditEntries = new();
+
+    private PostingFileModel? _latestFile => _postingFiles
+        .OrderByDescending(f => f.GeneratedTime)
+        .FirstOrDefault();
+
+    protected override void OnInitialized()
+    {
+        // Queue is empty in the demo (already posted)
+        _queueCheques = new List<QueueChequeModel>();
+
+        _postingFiles = new List<PostingFileModel>
+        {
+            new()
+            {
+                FileName = "debit-posting-20260818-003.txt",
+                Count = 2,
+                Amount = 6235000.00m,
+                Path = @"C:\CTS\Inward\Posting\",
+                GeneratedTime = "8/18/2026, 12:12:19 PM",
+                Status = "Posted"
+            },
+            new()
+            {
+                FileName = "debit-posting-20260601.txt",
+                Count = 1,
+                Amount = 0.00m,
+                Path = @"C:\CTS\Inward\Posting\",
+                GeneratedTime = "2026-06-01 12:50",
+                Status = "Generated"
+            }
+        };
+
+        _auditEntries = new List<AuditLogEntry>
+        {
+            new()
+            {
+                Timestamp = "8/18/2026, 12:12:19 PM",
+                Actor = "CTS Background Service",
+                Action = "Inward Debit Posted",
+                Note = "Cheque 120100 included in debit posting file."
+            },
+            new()
+            {
+                Timestamp = "8/18/2026, 12:12:19 PM",
+                Actor = "CTS Background Service",
+                Action = "Inward Debit Posted",
+                Note = "Cheque 730221 included in debit posting file."
+            },
+            new()
+            {
+                Timestamp = "8/18/2026, 12:12:19 PM",
+                Actor = "CTS Background Service",
+                Action = "Inward Debit Posting File Generated",
+                Note = "debit-posting-20260818-003.txt created for CBS mock."
+            }
+        };
+    }
+
+    private void RunService()
+    {
+        _lastRunTime = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt");
+        _message = "Debit posting service executed successfully. Queue processed.";
+        StateHasChanged();
+    }
+
+    public sealed class QueueChequeModel
+    {
+        public string ChequeNo { get; set; } = string.Empty;
+        public string CustomerAccount { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string Status { get; set; } = "Accepted";
+    }
+
+    public sealed class PostingFileModel
+    {
+        public string FileName { get; set; } = string.Empty;
+        public int Count { get; set; }
+        public decimal Amount { get; set; }
+        public string Path { get; set; } = string.Empty;
+        public string GeneratedTime { get; set; } = string.Empty;
+        public string Status { get; set; } = "Generated";
+    }
+
+    public sealed class AuditLogEntry
+    {
+        public string Timestamp { get; set; } = string.Empty;
+        public string Actor { get; set; } = string.Empty;
+        public string Action { get; set; } = string.Empty;
+        public string Note { get; set; } = string.Empty;
+    }
+}

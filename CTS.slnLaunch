@@ -1,0 +1,17 @@
+[
+  {
+    "Name": "App + API",
+    "Projects": [
+      {
+        "Path": "CTS.Api\\CTS.Api.csproj",
+        "Action": "Start",
+        "DebugTarget": "http"
+      },
+      {
+        "Path": "CTS.App\\CTS.App.csproj",
+        "Action": "Start",
+        "DebugTarget": "http"
+      }
+    ]
+  }
+]

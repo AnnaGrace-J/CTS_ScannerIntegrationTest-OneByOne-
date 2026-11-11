@@ -1,0 +1,50 @@
+@page "/search"
+@attribute [Authorize(Policy = PermissionCatalog.SearchViewPolicy)]
+@inject WorkspaceApiService Client
+
+<PageTitle>Cheque Search · ACE CTS</PageTitle>
+<PageHeader Section="Workspace" Title="Cheque Search" Subtitle="Find instruments across outward and inward workflows using operational references." Badge="Audit aware" />
+
+<section class="panel filter-panel">
+    <div class="panel-heading"><div><span class="eyebrow">SEARCH CRITERIA</span><h2>Locate clearing workitems</h2></div></div>
+    <div class="filter-grid">
+        <div class="form-field span-2"><label>Item, batch, cheque or account</label><input @bind="_searchText" placeholder="e.g. OW-000101 or 100001" /></div>
+        <div class="form-field"><label>Direction</label><select @bind="_direction"><option value="">All directions</option><option value="OUTWARD">Outward</option><option value="INWARD">Inward</option></select></div>
+        <div class="form-field"><label>Status</label><select @bind="_status"><option value="">All statuses</option><option value="PENDING">Pending</option><option value="READY">Ready</option><option value="EXCEPTION">Exception</option><option value="COMPLETED">Completed</option></select></div>
+        <div class="form-field"><label>Branch</label><select @bind="_branch"><option value="">All branches</option><option value="HO">Head Office</option><option value="001">Yangon</option><option value="002">Mandalay</option></select></div>
+        <div class="form-field"><label>From date</label><InputDate @bind-Value="_fromDate" /></div>
+        <div class="form-field"><label>To date</label><InputDate @bind-Value="_toDate" /></div>
+        <div class="filter-actions"><button class="primary-button" @onclick="SearchAsync">Search workitems</button><button class="text-button" @onclick="ResetAsync">Reset</button></div>
+    </div>
+</section>
+
+@if (_result is null)
+{
+    <LoadingState Error="@_error" Message="Searching CTS workitems..." />
+}
+else
+{
+    <section class="metric-grid compact"><article class="metric-card info"><span>Matching workitems</span><strong>@_result.TotalCount</strong><small>Across selected filters</small></article><article class="metric-card success"><span>Total value</span><strong>MMK @_result.TotalAmount.ToString("N0")</strong><small>Current result set</small></article><article class="metric-card warning"><span>Current page</span><strong>@_result.PageNo / @Math.Max(1, _result.PageCount)</strong><small>@_result.PageSize rows per page</small></article></section>
+    <section class="panel"><div class="panel-heading"><div><span class="eyebrow">RESULTS</span><h2>Cheque instruments</h2></div><span class="result-count">@_result.TotalCount result(s)</span></div><ChequeTable Items="@_result.Items" OnSelect="SelectAsync" /></section>
+    @if (_detail is not null)
+    {
+        <section class="panel search-detail"><div class="panel-heading"><div><span class="eyebrow">INSTRUMENT SNAPSHOT</span><h2>@_detail.Cheque.ChequeId</h2></div><StatusPill Status="@_detail.Cheque.Status" /></div><div class="snapshot-grid"><img src="@_detail.FrontImageUrl" alt="Cheque image" /><dl class="detail-list"><div><dt>Cheque no.</dt><dd>@_detail.Cheque.ChequeNo</dd></div><div><dt>Account</dt><dd>@_detail.AccountNo</dd></div><div><dt>Drawer</dt><dd>@_detail.DrawerName</dd></div><div><dt>Amount</dt><dd class="large">MMK @_detail.Cheque.Amount.ToString("N2")</dd></div><div><dt>Workstep</dt><dd>@_detail.Cheque.WorkstepLabel</dd></div></dl></div></section>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "q")] public string? Query { get; set; }
+    private string? _searchText;
+    private string _direction = string.Empty;
+    private string _status = string.Empty;
+    private string _branch = string.Empty;
+    private DateOnly? _fromDate;
+    private DateOnly? _toDate;
+    private string? _error;
+    private SearchResponseModel? _result;
+    private ChequeDetailResponseModel? _detail;
+    protected override async Task OnInitializedAsync() { _searchText = Query; await SearchAsync(); }
+    private async Task SearchAsync() { _error = null; var result = await Client.SearchAsync(new(_searchText, _direction, _status, _branch, _fromDate, _toDate)); if (result.IsSuccess) _result = result.Data; else _error = result.Message; }
+    private async Task ResetAsync() { _searchText = null; _direction = _status = _branch = string.Empty; _fromDate = _toDate = null; await SearchAsync(); }
+    private async Task SelectAsync(string id) { var result = await Client.DetailAsync(new(id)); if (result.IsSuccess) _detail = result.Data; else _error = result.Message; }
+}

@@ -1,0 +1,85 @@
+<div class="panel image-viewer-panel">
+    <div class="panel-heading">
+        <div>
+            <span class="eyebrow">IMAGE WORKSPACE</span>
+            <h2>@Title</h2>
+            @if (!string.IsNullOrWhiteSpace(Reference))
+            {
+                <span class="image-viewer-reference">@Reference</span>
+            }
+        </div>
+        <div class="image-viewer-badges">
+            <StatusPill Status="@Status" />
+            <span class="changed-badge @(ChangedCount > 0 ? "has-changes" : null)">
+                Changed @ChangedCount
+            </span>
+        </div>
+    </div>
+
+    <div class="image-viewer-toolbar">
+        <div class="image-view-tabs" role="tablist">
+            <button type="button" role="tab" class="tab-btn @(_activeView == "front" ? "active" : null)" @onclick="ShowFront">Front</button>
+            <button type="button" role="tab" class="tab-btn @(_activeView == "rear" ? "active" : null)" @onclick="ShowRear">Rear</button>
+            @if (!string.IsNullOrWhiteSpace(SignatureSrc))
+            {
+                <button type="button" role="tab" class="tab-btn @(_activeView == "signature" ? "active" : null)" @onclick="ShowSignature">Signature</button>
+            }
+        </div>
+        <div class="image-control-buttons">
+            <button type="button" class="tool-btn" title="Zoom In" @onclick="ZoomIn">🔍+ In</button>
+            <button type="button" class="tool-btn" title="Zoom Out" @onclick="ZoomOut">🔍- Out</button>
+            <button type="button" class="tool-btn" title="Rotate 90°" @onclick="Rotate">↻ Rotate</button>
+            <button type="button" class="tool-btn @(_invert ? "active" : null)" title="Invert Colors" @onclick="ToggleInvert">◑ Invert</button>
+            <button type="button" class="tool-btn" title="Reset View" @onclick="Reset">↺ Reset</button>
+        </div>
+    </div>
+
+    <div class="image-viewport-container">
+        <div class="image-canvas" style="@CanvasStyle">
+            <img src="@CurrentSrc" alt="Cheque @_activeView image" class="cheque-img" />
+        </div>
+    </div>
+
+    <div class="image-viewer-footer">
+        <span>Image Quality: <strong>Good (300 DPI)</strong></span>
+        <span>Zoom: <strong>@($"{(_zoom * 100):0}%")</strong> · Rotation: <strong>@($"{_rotation}°")</strong></span>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string FrontSrc { get; set; } = "/placeholders/cheque-front.svg";
+    [Parameter] public string? RearSrc { get; set; } = "/placeholders/cheque-back.svg";
+    [Parameter] public string? SignatureSrc { get; set; } = "/placeholders/signature.svg";
+    [Parameter] public string Title { get; set; } = "Repair Image Review";
+    [Parameter] public string Reference { get; set; } = string.Empty;
+    [Parameter] public string Status { get; set; } = "Repair Required";
+    [Parameter] public int ChangedCount { get; set; }
+
+    private string _activeView = "front";
+    private double _zoom = 1.0;
+    private int _rotation = 0;
+    private bool _invert = false;
+
+    private string CurrentSrc => _activeView switch
+    {
+        "rear" => string.IsNullOrWhiteSpace(RearSrc) ? FrontSrc : RearSrc,
+        "signature" => string.IsNullOrWhiteSpace(SignatureSrc) ? FrontSrc : SignatureSrc,
+        _ => FrontSrc
+    };
+
+    private string CanvasStyle => $"transform: scale({_zoom.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}) rotate({_rotation}deg); filter: {(_invert ? "invert(100%)" : "none")};";
+
+    private void ShowFront() => _activeView = "front";
+    private void ShowRear() => _activeView = "rear";
+    private void ShowSignature() => _activeView = "signature";
+    private void ZoomIn() => _zoom = Math.Min(3.0, _zoom + 0.2);
+    private void ZoomOut() => _zoom = Math.Max(0.5, _zoom - 0.2);
+    private void Rotate() => _rotation = (_rotation + 90) % 360;
+    private void ToggleInvert() => _invert = !_invert;
+    private void Reset()
+    {
+        _zoom = 1.0;
+        _rotation = 0;
+        _invert = false;
+    }
+}

@@ -1,0 +1,30 @@
+ACE CTS Demo Source-Only Package
+Created: 2026-08-12 14:43:30
+Source: D:\OneDrive\Documents\CTS DEMO
+
+Included:
+- src/ application source
+- public/ static placeholders/assets
+- docs/ project documentation and SRS outputs
+- screenshots/ Playwright screenshot specs
+- scripts/ audit and document generation scripts
+- tests/ responsive Playwright tests
+- package.json and package-lock.json
+- Vite, TypeScript, Tailwind, Vitest, Playwright config files
+
+Excluded:
+- node_modules/
+- dist/
+- test-results/
+- .git/
+- .codex/ and .codex-build/
+- .vercel/
+- work/
+- previous zip exports
+- brochure PDFs/DOCX files
+- build info and deployment logs
+
+Run on another machine:
+1. cd into this folder
+2. npm install
+3. npm run dev

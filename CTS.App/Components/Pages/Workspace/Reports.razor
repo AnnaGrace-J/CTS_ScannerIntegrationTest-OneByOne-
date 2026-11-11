@@ -1,0 +1,36 @@
+@page "/outward/reports"
+@page "/inward/reports"
+@attribute [Authorize]
+@inject WorkspaceApiService Client
+@inject NavigationManager Navigation
+
+<PageTitle>@_direction Reports · ACE CTS</PageTitle>
+<PageHeader Section="@($"{Pretty(_direction)} Clearing")" Title="@($"{Pretty(_direction)} Reports")" Subtitle="Generate and review operational, exception and settlement reports." Badge="@($"Business date {DateTime.Today:dd MMM yyyy}")" />
+
+@if (!string.IsNullOrWhiteSpace(_notice)) { <div class="alert success">@_notice</div> }
+<div class="reports-grid">
+    <section class="panel report-catalog"><div class="panel-heading"><div><span class="eyebrow">REPORT CATALOG</span><h2>Available reports</h2></div></div>
+        @foreach (var reportType in ReportTypes)
+        {
+            <article class="report-card"><div class="report-icon">▥</div><div><strong>@reportType</strong><span>Business-date report with branch, amount and status totals.</span></div><button class="secondary-button" disabled="@_generating" @onclick="() => GenerateAsync(reportType)">Generate</button></article>
+        }
+    </section>
+    <aside class="panel"><div class="panel-heading"><div><span class="eyebrow">RECENT OUTPUT</span><h2>Generated files</h2></div><button class="text-button" @onclick="LoadAsync">Refresh</button></div>
+        @if (_data is null) { <LoadingState Error="@_error" /> }
+        else if (_data.Reports.Count == 0) { <div class="empty-row">No reports have been generated for this direction.</div> }
+        else { <div class="file-list">@foreach (var report in _data.Reports) { <div><span class="file-icon">PDF</span><div><strong>@report.FileName</strong><small>@report.ReportType · @report.RequestedAtUtc.ToLocalTime().ToString("dd MMM, HH:mm")</small></div><StatusPill Status="@report.Status" /></div> }</div> }
+    </aside>
+</div>
+
+@code {
+    private string _direction = "OUTWARD";
+    private ReportsResponseModel? _data;
+    private string? _error;
+    private string? _notice;
+    private bool _generating;
+    private string[] ReportTypes => _direction == "OUTWARD" ? ["Clearing Summary", "Batch Control", "Upload Response", "Return and Credit Posting", "Exception Aging"] : ["Clearing Summary", "Technical Verification", "Referral and Return", "Debit and Charge Posting", "Exception Aging"];
+    protected override async Task OnInitializedAsync() { _direction = Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("inward", StringComparison.OrdinalIgnoreCase) ? "INWARD" : "OUTWARD"; await LoadAsync(); }
+    private async Task LoadAsync() { var result = await Client.ReportsAsync(new(_direction)); if (result.IsSuccess) _data = result.Data; else _error = result.Message; }
+    private async Task GenerateAsync(string type) { _generating = true; var result = await Client.GenerateReportAsync(new(_direction, $"{Pretty(_direction)} {type}", DateOnly.FromDateTime(DateTime.Today))); if (result.IsSuccess) { _notice = $"Report {result.Data?.FileName} generated successfully."; await LoadAsync(); } else _error = result.Message; _generating = false; }
+    private static string Pretty(string value) => System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(value.ToLowerInvariant());
+}

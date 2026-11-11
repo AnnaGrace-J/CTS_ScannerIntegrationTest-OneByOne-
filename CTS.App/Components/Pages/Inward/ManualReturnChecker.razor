@@ -1,0 +1,1076 @@
+@page "/inward/manual-return-checker"
+@attribute [Authorize]
+@inject WorkspaceApiService Client
+@inject NavigationManager Navigation
+
+@*
+// Original Code
+// @page "/inward/manual-return-checker"
+// @attribute [Authorize]
+// <WorkflowWorkspace Workstep="MANUAL_RETURN_CHECKER" />
+*@
+
+@* // Code Added by KK *@
+<PageTitle>Manual Return Checker · ACE CTS</PageTitle>
+
+<div class="demo-ops-root">
+    @* Top Workspace Header *@
+    <div class="demo-top-bar">
+        <div class="demo-breadcrumbs">
+            <span class="demo-bc-bold">ACE CTS Workspace</span>
+            <span class="demo-meta-text">
+                <span class="demo-icon">📅</span> Business date 2026-06-23
+                <span class="demo-icon ml-2">🏛</span> Head Office
+                <span class="demo-icon ml-2">Role:</span> ADMIN
+            </span>
+        </div>
+        <div class="demo-top-badges">
+            <span class="demo-audit-badge">Audit events: <strong>7</strong></span>
+            <span class="demo-user-badge">admin1</span>
+        </div>
+    </div>
+
+    @* Header Card with Working Hide/Show Info & Run Cutoff Auto-Accept *@
+    <div class="demo-card demo-header-card">
+        @if (_infoCollapsed)
+        {
+            <div class="demo-header-collapsed-row">
+                <div class="demo-collapsed-left">
+                    <h1 class="demo-collapsed-title">Manual Return Checker</h1>
+                    <span class="demo-chip chip-passed">Cutoff passed</span>
+                    <span class="demo-chip chip-cyan">BRANCH <strong>Head Office</strong></span>
+                    <span class="demo-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+                    <span class="demo-chip chip-blue">DATE <strong>@DateTime.Today.ToString("yyyy-MM-dd")</strong></span>
+                </div>
+                <div class="demo-header-actions-inline">
+                    <button class="demo-ghost-btn" @onclick="RunCutoffAutoAccept">
+                        <span class="demo-icon">🕒</span> Run Cutoff Auto-Accept
+                    </button>
+                    <button class="demo-ghost-btn" @onclick="() => _infoCollapsed = false">
+                        <span class="demo-icon">👁</span> Show Info
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="demo-header-full">
+                <div class="demo-header-full-top">
+                    <div>
+                        <div class="demo-sub-breadcrumbs">
+                            <span>ACE CTS Workspace</span>
+                            <span class="demo-bc-sep">/</span>
+                            <span>Inward</span>
+                            <span class="demo-bc-sep">/</span>
+                            <span class="demo-bc-current">Manual Return Checker</span>
+                        </div>
+                        <h1 class="demo-main-title">Manual Return Checker</h1>
+                        <p class="demo-header-subtitle">Approve or reject manual return requests.</p>
+                    </div>
+                    <div class="demo-header-actions-inline">
+                        <button class="demo-ghost-btn" @onclick="RunCutoffAutoAccept">
+                            <span class="demo-icon">🕒</span> Run Cutoff Auto-Accept
+                        </button>
+                        <button class="demo-ghost-btn" @onclick="() => _infoCollapsed = true">
+                            <span class="demo-icon">👁</span> Hide Info
+                        </button>
+                    </div>
+                </div>
+
+                <div class="demo-header-chips-row">
+                    <span class="demo-chip chip-cyan">BRANCH <strong>Head Office</strong></span>
+                    <span class="demo-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+                    <span class="demo-chip chip-blue">BUSINESS DATE <strong>@DateTime.Today.ToString("yyyy-MM-dd")</strong></span>
+                    <span class="demo-chip chip-gray">LAST UPDATED <strong>@DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt")</strong></span>
+                    <span class="demo-chip chip-passed">STATUS <strong>Cutoff passed</strong></span>
+                    <span class="demo-chip chip-gray">QUEUE ITEMS <strong>@FilteredRows.Count</strong></span>
+                    <span class="demo-chip chip-gray">SELECTED CHEQUE <strong>@(SelectedCheque?.ChequeNo ?? "None")</strong></span>
+                    <span class="demo-chip chip-gray">CUTOFF <strong>15:00</strong></span>
+                    <span class="demo-chip chip-blue">CONTROL <strong>Checker approval</strong></span>
+                </div>
+            </div>
+        }
+    </div>
+
+@*
+// Original Code
+// ( Original Code, before fixing )
+    <!-- KPI Summary Strip with Working Hide/Show Summary -->
+    <div class="demo-summary-row">
+        <div class="demo-pills-wrap">
+            <div class="demo-kpi-card kpi-green">
+                <span class="kpi-label">QUEUE ITEMS</span>
+                <strong class="kpi-val">@FilteredRows.Count</strong>
+            </div>
+            <div class="demo-kpi-card kpi-blue">
+                <span class="kpi-label">TOTAL AMOUNT</span>
+                <strong class="kpi-val">@TotalQueueAmount.ToString("N0")</strong>
+            </div>
+            <div class="demo-kpi-card kpi-red">
+                <span class="kpi-label">CUTOFF STATUS</span>
+                <strong class="kpi-val">Cutoff passed</strong>
+                <small class="kpi-hint">Checker approvals are at cutoff risk.</small>
+            </div>
+            <div class="demo-kpi-card kpi-blue">
+                <span class="kpi-label">APPROVE TARGET</span>
+                <strong class="kpi-val">Return ICL Creation</strong>
+            </div>
+        </div>
+        <button class="demo-ghost-btn" @onclick="() => _summaryCollapsed = !_summaryCollapsed">
+            <span class="demo-icon">👁</span> @(_summaryCollapsed ? "Show Summary" : "Hide Summary")
+        </button>
+    </div>
+*@
+
+@* // Code Added by KK *@
+    @if (_summaryCollapsed)
+    {
+        <div class="demo-summary-row demo-summary-collapsed-row">
+            <div class="demo-pills-wrap">
+                <span class="demo-chip chip-green">QUEUE ITEMS <strong>@FilteredRows.Count</strong></span>
+                <span class="demo-chip chip-blue">TOTAL AMOUNT <strong>@TotalQueueAmount.ToString("N0")</strong></span>
+                <span class="demo-chip chip-passed">CUTOFF STATUS <strong>Cutoff passed</strong></span>
+                <span class="demo-chip chip-blue">APPROVE TARGET <strong>Return ICL Creation</strong></span>
+            </div>
+            <button class="demo-ghost-btn" @onclick="() => _summaryCollapsed = false">
+                <span class="demo-icon">👁</span> Show Summary
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="demo-summary-row">
+            <div class="demo-pills-wrap">
+                <div class="demo-kpi-card kpi-green">
+                    <span class="kpi-label">QUEUE ITEMS</span>
+                    <strong class="kpi-val">@FilteredRows.Count</strong>
+                </div>
+                <div class="demo-kpi-card kpi-blue">
+                    <span class="kpi-label">TOTAL AMOUNT</span>
+                    <strong class="kpi-val">@TotalQueueAmount.ToString("N0")</strong>
+                </div>
+                <div class="demo-kpi-card kpi-red">
+                    <span class="kpi-label">CUTOFF STATUS</span>
+                    <strong class="kpi-val">Cutoff passed</strong>
+                    <small class="kpi-hint">Manual return decisions are at cutoff risk.</small>
+                </div>
+                <div class="demo-kpi-card kpi-blue">
+                    <span class="kpi-label">APPROVE TARGET</span>
+                    <strong class="kpi-val">Return ICL Creation</strong>
+                </div>
+            </div>
+            <button class="demo-ghost-btn" @onclick="() => _summaryCollapsed = true">
+                <span class="demo-icon">👁</span> Hide Summary
+            </button>
+        </div>
+    }
+
+    @* Alerts / Feedback *@
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="demo-alert demo-alert-danger">
+            <span>@_message</span>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="demo-alert demo-alert-success">
+            <span>✓ @_successMessage</span>
+        </div>
+    }
+
+    @* Manual Return Checker Filters with Working Hide/Show Filters *@
+    <div class="demo-card demo-filter-panel">
+        <div class="demo-filter-header">
+            <div>
+                <h2 class="demo-filter-title">Manual Return Checker Filters</h2>
+                <span class="demo-filter-count">@FilteredRows.Count matching records</span>
+            </div>
+            <button class="demo-ghost-btn" @onclick="() => _filtersCollapsed = !_filtersCollapsed">
+                <span>@(_filtersCollapsed ? "▼ Show Filters" : "▲ Hide Filters")</span>
+            </button>
+        </div>
+        @if (!_filtersCollapsed)
+        {
+            <div class="demo-filter-grid">
+                <div class="demo-field">
+                    <label class="demo-label">CHEQUE NO.</label>
+                    <input type="text" class="demo-input" placeholder="Search cheque no..." @bind="_filterChequeNo" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">AMOUNT</label>
+                    <input type="text" class="demo-input" placeholder="Search amount..." @bind="_filterAmount" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">MICR A/C NO.</label>
+                    <input type="text" class="demo-input" placeholder="Search MICR account..." @bind="_filterMicrAccount" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">ROUTING NO.</label>
+                    <input type="text" class="demo-input" placeholder="Search routing..." @bind="_filterRouting" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">CUSTOMER A/C NO.</label>
+                    <input type="text" class="demo-input" placeholder="Search customer account..." @bind="_filterCustomerAccount" @bind:event="oninput" />
+                </div>
+            </div>
+        }
+    </div>
+
+@*
+// Original Code
+// ( Original Code, before fixing )
+    <!-- Manual Return Checker Queue Table -->
+    <div class="demo-card demo-table-panel">
+        <div class="demo-table-panel-header">
+            <h3 class="demo-panel-title">Manual Return Checker Queue</h3>
+            <span class="demo-panel-sub">@FilteredRows.Count record(s)</span>
+        </div>
+        <div class="demo-table-wrapper">
+            <table class="demo-data-table">
+                <thead>
+                    <tr>
+                        <th>CHEQUE NUMBER</th>
+                        <th>AMOUNT</th>
+                        <th>MAKER DECISION</th>
+                        <th>REASON</th>
+                        <th>REMARKS</th>
+                        <th>REQUESTED TIME</th>
+                        <th style="width: 36px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (FilteredRows.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="demo-empty-cell">
+                                <div class="empty-state-box">
+                                    <div class="empty-icon">📄</div>
+                                    <strong class="empty-title">No records found</strong>
+                                    <span class="empty-sub">Adjust filters or run the relevant demo service to create workitems.</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in FilteredRows)
+                        {
+                            var isSelected = SelectedCheque?.Id == row.Id;
+                            <tr class="demo-clickable-row @(isSelected ? "row-selected" : "")" @onclick="() => SelectCheque(row)">
+                                <td class="font-bold">@row.ChequeNo</td>
+                                <td class="font-bold">@row.Amount.ToString("N2")</td>
+                                <td><span class="demo-tag tag-returned">@row.MakerDecision</span></td>
+                                <td>@row.Reason</td>
+                                <td>@row.Remarks</td>
+                                <td>@row.RequestedTime</td>
+                                <td class="text-right"><span class="demo-chevron-indicator">›</span></td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+*@
+
+@* // Code Added by KK *@
+    <div class="demo-card demo-table-panel">
+        <div class="demo-table-panel-header">
+            <h3 class="demo-panel-title">Manual Return Checker Queue</h3>
+            <span class="demo-panel-sub">@FilteredRows.Count record(s)</span>
+        </div>
+        <div class="demo-table-wrapper">
+            <table class="demo-data-table queue-aligned-table">
+                <thead>
+                    <tr>
+                        <th style="width: 16%;">CHEQUE NUMBER</th>
+                        <th style="width: 16%;">AMOUNT</th>
+                        <th style="width: 15%;">MAKER DECISION</th>
+                        <th style="width: 18%;">REASON</th>
+                        <th style="width: 15%;">REMARKS</th>
+                        <th style="width: 16%;">REQUESTED TIME</th>
+                        <th style="width: 4%;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (FilteredRows.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="demo-empty-cell">
+                                <div class="empty-state-box">
+                                    <div class="empty-icon">📄</div>
+                                    <strong class="empty-title">No records found</strong>
+                                    <span class="empty-sub">Adjust filters or run the relevant demo service to create workitems.</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in FilteredRows)
+                        {
+                            var isSelected = SelectedCheque?.Id == row.Id;
+                            <tr class="demo-clickable-row @(isSelected ? "row-selected" : "")" @onclick="() => SelectCheque(row)">
+                                <td class="font-bold">@row.ChequeNo</td>
+                                <td class="font-bold">@row.Amount.ToString("N2")</td>
+                                <td><span class="demo-tag tag-returned">@row.MakerDecision</span></td>
+                                <td>@row.Reason</td>
+                                <td>@row.Remarks</td>
+                                <td>@row.RequestedTime</td>
+                                <td class="text-right text-muted"><span class="demo-chevron-indicator">›</span></td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @* 3-Panel Bottom Workspace when item is present/selected *@
+    @if (SelectedCheque != null)
+    {
+        <div class="demo-3col-workspace">
+            @* Column 1: Cheque Image Review *@
+            <div class="demo-card demo-workspace-col">
+                <div class="demo-col-header">
+                    <div>
+                        <h3 class="demo-panel-title">Cheque Image Review</h3>
+                        <span class="demo-panel-sub">Cheque @SelectedCheque.ChequeNo | UIC @SelectedCheque.Uic</span>
+                    </div>
+                </div>
+
+                <div class="demo-viewer-badge-bar">
+                    <span class="demo-tag tag-returned">Return Approval</span>
+                    <span class="demo-tag tag-routing">Routing @SelectedCheque.RoutingNumber</span>
+                </div>
+
+                <div class="demo-cheque-image-frame">
+                    <img src="@CurrentChequeImageUrl" alt="Cheque Image" class="demo-cheque-img" />
+                </div>
+
+                <div class="demo-viewer-tabs mt-3">
+                    <button class="demo-viewer-tab-btn @(_imageView == "front" ? "active" : "")" @onclick='() => _imageView = "front"'>Front</button>
+                    <button class="demo-viewer-tab-btn @(_imageView == "rear" ? "active" : "")" @onclick='() => _imageView = "rear"'>Rear</button>
+                </div>
+            </div>
+
+            @* Column 2: Account & Verification Details *@
+            <div class="demo-card demo-workspace-col">
+                <div class="demo-col-header">
+                    <h3 class="demo-panel-title">Cheque / Account Summary</h3>
+                </div>
+
+                <div class="demo-field-group">
+                    <div class="demo-field-group-title">DRAWER ACCOUNT</div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Drawer A/C</span>
+                        <span class="field-value font-mono font-bold">@SelectedCheque.DrawerAccount</span>
+                    </div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Name</span>
+                        <span class="field-value font-bold">@SelectedCheque.AccountName</span>
+                    </div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Branch</span>
+                        <span class="field-value">@SelectedCheque.Branch</span>
+                    </div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Balance</span>
+                        <span class="field-value font-bold">@SelectedCheque.Balance.ToString("N2")</span>
+                    </div>
+                </div>
+
+                <div class="demo-field-group mt-3">
+                    <div class="demo-field-group-title">CHEQUE SUMMARY</div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Cheque No.</span>
+                        <span class="field-value">@SelectedCheque.ChequeNo</span>
+                    </div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Routing No.</span>
+                        <span class="field-value font-mono">@SelectedCheque.RoutingNumber</span>
+                    </div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Amount</span>
+                        <span class="field-value font-bold">@SelectedCheque.Amount.ToString("N2")</span>
+                    </div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Maker Decision</span>
+                        <span class="field-value text-red font-medium">@SelectedCheque.MakerDecision</span>
+                    </div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Reason</span>
+                        <span class="field-value">@SelectedCheque.Reason</span>
+                    </div>
+                </div>
+
+                <div class="demo-sig-frame mt-3">
+                    <img src="/placeholders/signature.svg" alt="Synthetic signature specimen" class="demo-sig-img" />
+                    <span class="demo-sig-hint">Synthetic signature specimen visible for demo review.</span>
+                </div>
+            </div>
+
+            @* Column 3: Checker Approval Decision Panel *@
+            <div class="demo-card demo-workspace-col">
+                <div class="demo-col-header">
+                    <h3 class="demo-panel-title">Checker Decision Panel</h3>
+                </div>
+
+                <div class="demo-field-group">
+                    <div class="demo-field-group-title">DECISION CONTEXT</div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Approve Target</span>
+                        <span class="field-value font-bold">Return ICL Creation</span>
+                    </div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Reject Target</span>
+                        <span class="field-value font-bold">Debit Posting</span>
+                    </div>
+                    <div class="demo-field-row">
+                        <span class="field-label">Cutoff Status</span>
+                        <span class="field-value text-red font-medium">Cutoff passed</span>
+                    </div>
+                </div>
+
+                <div class="demo-decision-form mt-3">
+                    <div class="demo-field">
+                        <label class="demo-label">CHECKER REMARKS</label>
+                        <textarea class="demo-textarea" rows="3" placeholder="Enter checker notes (optional)..." @bind="_checkerRemarks"></textarea>
+                    </div>
+
+                    <div class="demo-decision-actions mt-4">
+                        <button class="demo-action-btn btn-navy" @onclick="ApproveReturn">
+                            <span>✓</span>
+                            <span>Approve Return</span>
+                        </button>
+                        <button class="demo-action-btn btn-secondary" @onclick="RejectReturn">
+                            <span>✕</span>
+                            <span>Reject Decision</span>
+                        </button>
+                        <button class="demo-action-btn btn-secondary" @onclick='() => Navigation.NavigateTo("/inward/dashboard")'>
+                            <span>Exit</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Collapsible Audit Timeline *@
+    <div class="demo-card demo-pane">
+        <div class="demo-pane-header">
+            <div>
+                <strong class="demo-panel-title">Audit Timeline</strong>
+                <span class="demo-panel-sub ml-2">@_auditEvents.Count audit event(s)</span>
+            </div>
+            <button class="demo-link-btn" @onclick="() => _auditOpen = !_auditOpen">
+                <span>@(_auditOpen ? "▲ Close Audit" : "▼ Open Audit")</span>
+            </button>
+        </div>
+        @if (_auditOpen)
+        {
+            <div class="demo-audit-events-list">
+                @if (_auditEvents.Count == 0)
+                {
+                    <div class="demo-empty-cell">0 audit event(s)</div>
+                }
+                else
+                {
+                    @foreach (var ev in _auditEvents)
+                    {
+                        <div class="demo-audit-item">
+                            <span class="demo-audit-time">@ev.Timestamp - @ev.User</span>
+                            <strong class="demo-audit-act">@ev.Action</strong>
+                            <p class="demo-audit-desc">@ev.Description</p>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@*
+// Original Code
+// ( Original Code, before fixing )
+<style>
+    .demo-ops-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #172033;
+        background: #F5F7FA;
+        min-height: calc(100vh - 80px);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .demo-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 16px 20px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .demo-top-bar { display: flex; align-items: center; justify-content: space-between; }
+    .demo-breadcrumbs { font-size: 13px; color: #475569; }
+    .demo-bc-bold { font-weight: 700; color: #0F2A44; margin-right: 8px; }
+    .demo-meta-text { font-size: 12px; color: #64748B; }
+    .demo-top-badges { display: flex; align-items: center; gap: 8px; }
+    .demo-audit-badge { font-size: 11px; background: #FFFFFF; border: 1px solid #CBD5E1; padding: 3px 10px; border-radius: 4px; color: #334155; }
+    .demo-user-badge { font-size: 12px; font-weight: 700; background: #FFFFFF; border: 1px solid #CBD5E1; padding: 3px 10px; border-radius: 4px; color: #0F2A44; }
+
+    .demo-header-full-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+    .demo-sub-breadcrumbs { font-size: 11px; color: #64748B; margin-bottom: 4px; display: flex; gap: 4px; }
+    .demo-bc-sep { color: #94A3B8; }
+    .demo-bc-current { font-weight: 700; color: #0F2A44; }
+    .demo-main-title { font-size: 18px; font-weight: 800; color: #0F2A44; margin: 0 0 4px 0; }
+    .demo-header-subtitle { font-size: 12px; color: #64748B; margin: 0; }
+    .demo-header-chips-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .demo-header-actions-inline { display: flex; align-items: center; gap: 8px; }
+
+    .demo-header-collapsed-row { display: flex; align-items: center; justify-content: space-between; }
+    .demo-collapsed-left { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .demo-collapsed-title { font-size: 16px; font-weight: 800; color: #0F2A44; margin: 0; }
+
+    .demo-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 10px; border-radius: 4px; border: 1px solid transparent; }
+    .chip-passed { background: #FEF2F2; border-color: #FECACA; color: #DC2626; font-weight: 700; }
+    .chip-cyan { background: #ECFEFF; border-color: #A5F3FC; color: #0891B2; }
+    .chip-blue { background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8; }
+    .chip-gray { background: #F8FAFC; border-color: #E2E8F0; color: #475569; }
+
+    .demo-ghost-btn {
+        background: #FFFFFF;
+        border: 1px solid #CBD5E1;
+        border-radius: 5px;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #334155;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .demo-ghost-btn:hover { background: #F1F5F9; }
+
+    .demo-summary-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .demo-pills-wrap { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .demo-kpi-card {
+        border-radius: 8px;
+        padding: 10px 18px;
+        min-width: 140px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .kpi-green { background: #DCFCE7; border: 1px solid #BBF7D0; }
+    .kpi-green .kpi-label { font-size: 10px; font-weight: 800; color: #15803D; }
+    .kpi-green .kpi-val { font-size: 18px; font-weight: 800; color: #15803D; }
+    .kpi-blue { background: #EFF6FF; border: 1px solid #BFDBFE; }
+    .kpi-blue .kpi-label { font-size: 10px; font-weight: 800; color: #1D4ED8; }
+    .kpi-blue .kpi-val { font-size: 18px; font-weight: 800; color: #1D4ED8; }
+    .kpi-red { background: #FEF2F2; border: 1px solid #FECACA; }
+    .kpi-red .kpi-label { font-size: 10px; font-weight: 800; color: #DC2626; }
+    .kpi-red .kpi-val { font-size: 16px; font-weight: 800; color: #DC2626; }
+    .kpi-hint { font-size: 10px; color: #B91C1C; }
+
+    .demo-filter-panel { padding: 14px 20px; }
+    .demo-filter-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .demo-filter-title { font-size: 14px; font-weight: 800; color: #0F2A44; margin: 0; }
+    .demo-filter-count { font-size: 11px; color: #64748B; margin-left: 8px; }
+    .demo-filter-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; padding-top: 8px; border-top: 1px solid #F1F5F9; }
+    .demo-field { display: flex; flex-direction: column; gap: 4px; }
+    .demo-label { font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #475569; }
+    .demo-input { border: 1px solid #CBD5E1; border-radius: 6px; padding: 7px 10px; font-size: 12px; color: #0F2A44; outline: none; }
+    .demo-textarea { border: 1px solid #CBD5E1; border-radius: 6px; padding: 7px 10px; font-size: 12px; color: #0F2A44; resize: vertical; }
+
+    .demo-table-panel { padding: 0; overflow: hidden; }
+    .demo-table-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid #EEF2F6; }
+    .demo-panel-title { font-size: 13px; font-weight: 800; color: #0F2A44; margin: 0; }
+    .demo-panel-sub { font-size: 11px; color: #64748B; }
+    .demo-table-wrapper { width: 100%; overflow-x: auto; }
+    .demo-data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .demo-data-table th { background: #F8FAFC; color: #475569; font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; padding: 10px 14px; border-bottom: 1px solid #E2E8F0; }
+    .demo-data-table td { padding: 11px 14px; border-bottom: 1px solid #EEF2F6; color: #172033; }
+    .demo-clickable-row { cursor: pointer; }
+    .demo-clickable-row:hover { background: #F0F7FF; }
+    .demo-clickable-row.row-selected { background: #EFF6FF; }
+    .demo-empty-cell { text-align: center; color: #94A3B8; padding: 36px 16px; }
+
+    .empty-state-box { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+    .empty-icon { font-size: 28px; color: #94A3B8; }
+    .empty-title { font-size: 14px; font-weight: 700; color: #172033; }
+    .empty-sub { font-size: 12px; color: #64748B; }
+
+    .demo-3col-workspace { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: start; }
+    .demo-workspace-col { padding: 16px; }
+    .demo-col-header { margin-bottom: 10px; border-bottom: 1px solid #EEF2F6; padding-bottom: 8px; }
+
+    .demo-viewer-badge-bar { display: flex; gap: 8px; margin-bottom: 10px; }
+    .demo-cheque-image-frame { border: 1px dashed #CBD5E1; background: #F8FAFC; border-radius: 8px; padding: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; }
+    .demo-cheque-img { max-height: 160px; max-width: 100%; object-fit: contain; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 4px; }
+    .demo-viewer-tabs { display: flex; gap: 6px; }
+    .demo-viewer-tab-btn { border: 1px solid #CBD5E1; background: #FFFFFF; border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
+    .demo-viewer-tab-btn.active { background: #0F2A44; border-color: #0F2A44; color: #FFFFFF; }
+
+    .demo-field-group { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+    .demo-field-group-title { font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #64748B; margin-bottom: 2px; }
+    .demo-field-row { display: flex; justify-content: space-between; font-size: 12px; }
+    .field-label { color: #64748B; }
+    .field-value { color: #0F2A44; }
+
+    .demo-sig-frame { border: 1px solid #E2E8F0; border-radius: 6px; background: #FFFFFF; padding: 8px; text-align: center; }
+    .demo-sig-img { height: 60px; width: 100%; object-fit: contain; }
+    .demo-sig-hint { font-size: 10px; color: #94A3B8; display: block; margin-top: 4px; }
+
+    .demo-decision-actions { display: flex; gap: 8px; }
+    .demo-action-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 16px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .btn-navy { background: #0F2A44; color: #FFFFFF; border: 1px solid #0F2A44; }
+    .btn-navy:hover { background: #1B3C61; }
+    .btn-secondary { background: #FFFFFF; color: #0F2A44; border: 1px solid #CBD5E1; }
+    .btn-secondary:hover { background: #F1F5F9; }
+
+    .demo-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+    .tag-returned { background: #FEF3C7; color: #B45309; border: 1px solid #FDE68A; }
+    .tag-routing { background: #ECFEFF; color: #0891B2; border: 1px solid #A5F3FC; }
+
+    .demo-alert { padding: 10px 14px; border-radius: 6px; font-size: 11px; display: flex; gap: 8px; }
+    .demo-alert-danger { background: #FEF2F2; border: 1px solid #FECACA; color: #DC2626; }
+    .demo-alert-success { background: #ECFDF5; border: 1px solid #A7F3D0; color: #059669; }
+
+    .demo-pane { padding: 14px 20px; }
+    .demo-pane-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .demo-link-btn { background: none; border: none; color: #2563EB; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .demo-audit-events-list { display: flex; flex-direction: column; gap: 10px; }
+    .demo-audit-item { border-left: 2px solid #2563EB; padding-left: 10px; }
+    .demo-audit-time { font-size: 10px; color: #94A3B8; display: block; }
+    .demo-audit-act { font-size: 12px; color: #0F2A44; display: block; }
+    .demo-audit-desc { font-size: 11px; color: #64748B; margin: 0; }
+
+    .font-mono { font-family: monospace; }
+    .font-bold { font-weight: 700; }
+    .font-medium { font-weight: 600; }
+    .mt-3 { margin-top: 12px; }
+    .mt-4 { margin-top: 16px; }
+    .ml-2 { margin-left: 8px; }
+    .text-red { color: #DC2626; }
+    .text-right { text-align: right; }
+</style>
+*@
+
+@* // Code Added by KK *@
+<style>
+    .demo-ops-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: var(--text, #172033);
+        background: var(--background, #F5F7FA);
+        min-height: calc(100vh - 80px);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .demo-card {
+        background: var(--surface-solid, #FFFFFF);
+        border: 1px solid var(--border, #E2E8F0);
+        border-radius: 8px;
+        padding: 16px 20px;
+        box-shadow: var(--shadow, 0 1px 3px rgba(0, 0, 0, 0.04));
+    }
+
+    .demo-top-bar { display: flex; align-items: center; justify-content: space-between; }
+    .demo-breadcrumbs { font-size: 13px; color: var(--muted, #475569); }
+    .demo-bc-bold { font-weight: 700; color: var(--heading, #0F2A44); margin-right: 8px; }
+    .demo-meta-text { font-size: 12px; color: var(--muted, #64748B); }
+    .demo-top-badges { display: flex; align-items: center; gap: 8px; }
+    .demo-audit-badge { font-size: 11px; background: var(--surface, #FFFFFF); border: 1px solid var(--border, #CBD5E1); padding: 3px 10px; border-radius: 4px; color: var(--text, #334155); }
+    .demo-user-badge { font-size: 12px; font-weight: 700; background: var(--surface, #FFFFFF); border: 1px solid var(--border, #CBD5E1); padding: 3px 10px; border-radius: 4px; color: var(--heading, #0F2A44); }
+
+    .demo-header-full-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+    .demo-sub-breadcrumbs { font-size: 11px; color: var(--muted, #64748B); margin-bottom: 4px; display: flex; gap: 4px; }
+    .demo-bc-sep { color: var(--placeholder, #94A3B8); }
+    .demo-bc-current { font-weight: 700; color: var(--heading, #0F2A44); }
+    .demo-main-title { font-size: 18px; font-weight: 800; color: var(--heading, #0F2A44); margin: 0 0 4px 0; }
+    .demo-header-subtitle { font-size: 12px; color: var(--muted, #64748B); margin: 0; }
+    .demo-header-chips-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .demo-header-actions-inline { display: flex; align-items: center; gap: 8px; }
+
+    .demo-header-collapsed-row { display: flex; align-items: center; justify-content: space-between; }
+    .demo-collapsed-left { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .demo-collapsed-title { font-size: 16px; font-weight: 800; color: var(--heading, #0F2A44); margin: 0; }
+
+    .demo-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 10px; border-radius: 4px; border: 1px solid transparent; }
+    .chip-passed { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.3); color: #EF4444; font-weight: 700; }
+    .chip-cyan { background: rgba(8, 145, 178, 0.12); border-color: rgba(8, 145, 178, 0.3); color: #06B6D4; }
+    .chip-blue { background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.3); color: #3B82F6; }
+    .chip-green { background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.3); color: #10B981; font-weight: 700; }
+    .chip-gray { background: var(--surface-secondary, #F8FAFC); border-color: var(--border, #E2E8F0); color: var(--muted, #475569); }
+
+    .demo-ghost-btn {
+        background: var(--surface, #FFFFFF);
+        border: 1px solid var(--border, #CBD5E1);
+        border-radius: 5px;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text, #334155);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .demo-ghost-btn:hover { background: var(--hover, #F1F5F9); }
+
+    .demo-summary-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .demo-summary-collapsed-row { padding: 8px 14px; background: var(--surface-solid, #FFFFFF); border: 1px solid var(--border, #E2E8F0); border-radius: 8px; }
+    .demo-pills-wrap { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .demo-kpi-card {
+        border-radius: 8px;
+        padding: 10px 18px;
+        min-width: 140px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .kpi-green { background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .kpi-green .kpi-label { font-size: 10px; font-weight: 800; color: #059669; }
+    .kpi-green .kpi-val { font-size: 18px; font-weight: 800; color: #059669; }
+    .kpi-blue { background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.3); }
+    .kpi-blue .kpi-label { font-size: 10px; font-weight: 800; color: #2563EB; }
+    .kpi-blue .kpi-val { font-size: 18px; font-weight: 800; color: #2563EB; }
+    .kpi-red { background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .kpi-red .kpi-label { font-size: 10px; font-weight: 800; color: #DC2626; }
+    .kpi-red .kpi-val { font-size: 16px; font-weight: 800; color: #DC2626; }
+    .kpi-hint { font-size: 10px; color: #B91C1C; }
+
+    .demo-filter-panel { padding: 14px 20px; }
+    .demo-filter-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .demo-filter-title { font-size: 14px; font-weight: 800; color: var(--heading, #0F2A44); margin: 0; }
+    .demo-filter-count { font-size: 11px; color: var(--muted, #64748B); margin-left: 8px; }
+    .demo-filter-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; padding-top: 8px; border-top: 1px solid var(--separator, #F1F5F9); }
+    .demo-field { display: flex; flex-direction: column; gap: 4px; }
+    .demo-label { font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted, #475569); }
+    .demo-input { border: 1px solid var(--border, #CBD5E1); background: var(--surface-solid, #FFFFFF); border-radius: 6px; padding: 7px 10px; font-size: 12px; color: var(--text, #0F2A44); outline: none; }
+    .demo-input:focus { border-color: var(--accent, #007aff); }
+    .demo-textarea { border: 1px solid var(--border, #CBD5E1); background: var(--surface-solid, #FFFFFF); border-radius: 6px; padding: 7px 10px; font-size: 12px; color: var(--text, #0F2A44); resize: vertical; }
+
+    .demo-table-panel { padding: 0; overflow: hidden; }
+    .demo-table-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--separator, #EEF2F6); }
+    .demo-panel-title { font-size: 13px; font-weight: 800; color: var(--heading, #0F2A44); margin: 0; }
+    .demo-panel-sub { font-size: 11px; color: var(--muted, #64748B); }
+    .demo-table-wrapper { width: 100%; overflow-x: auto; }
+    .demo-data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .demo-data-table th { background: var(--surface-secondary, #F8FAFC); color: var(--muted, #475569); font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; padding: 10px 18px; border-bottom: 1px solid var(--border, #E2E8F0); text-align: left; }
+    .demo-data-table td { padding: 11px 18px; border-bottom: 1px solid var(--separator, #EEF2F6); color: var(--text, #172033); }
+    .demo-clickable-row { cursor: pointer; }
+    .demo-clickable-row:hover { background: var(--hover, #F0F7FF); }
+    .demo-clickable-row.row-selected { background: var(--accent-soft, #EFF6FF); }
+    .demo-empty-cell { text-align: center; color: var(--muted, #94A3B8); padding: 36px 16px; }
+
+    .empty-state-box { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+    .empty-icon { font-size: 28px; color: var(--muted, #94A3B8); }
+    .empty-title { font-size: 14px; font-weight: 700; color: var(--heading, #172033); }
+    .empty-sub { font-size: 12px; color: var(--muted, #64748B); }
+
+    .demo-3col-workspace { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: start; }
+    .demo-workspace-col { padding: 16px; }
+    .demo-col-header { margin-bottom: 10px; border-bottom: 1px solid var(--separator, #EEF2F6); padding-bottom: 8px; }
+
+    .demo-viewer-badge-bar { display: flex; gap: 8px; margin-bottom: 10px; }
+    .demo-cheque-image-frame { border: 1px dashed var(--border, #CBD5E1); background: var(--surface-secondary, #F8FAFC); border-radius: 8px; padding: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; }
+    .demo-cheque-img { max-height: 160px; max-width: 100%; object-fit: contain; background: #FFFFFF; border: 1px solid var(--border, #CBD5E1); border-radius: 4px; }
+    .demo-viewer-tabs { display: flex; gap: 6px; }
+    .demo-viewer-tab-btn { border: 1px solid var(--border, #CBD5E1); background: var(--surface, #FFFFFF); color: var(--text, inherit); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
+    .demo-viewer-tab-btn.active { background: var(--primary, #0F2A44); border-color: var(--primary, #0F2A44); color: #FFFFFF; }
+
+    .demo-field-group { background: var(--surface-secondary, #F8FAFC); border: 1px solid var(--border, #E2E8F0); border-radius: 6px; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+    .demo-field-group-title { font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted, #64748B); margin-bottom: 2px; }
+    .demo-field-row { display: flex; justify-content: space-between; font-size: 12px; }
+    .field-label { color: var(--muted, #64748B); }
+    .field-value { color: var(--heading, #0F2A44); }
+
+    .demo-sig-frame { border: 1px solid var(--border, #E2E8F0); border-radius: 6px; background: #FFFFFF; padding: 8px; text-align: center; }
+    .demo-sig-img { height: 60px; width: 100%; object-fit: contain; }
+    .demo-sig-hint { font-size: 10px; color: var(--muted, #94A3B8); display: block; margin-top: 4px; }
+
+    .demo-decision-actions { display: flex; gap: 8px; }
+    .demo-action-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 16px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .btn-navy { background: var(--primary, #0F2A44); color: #FFFFFF; border: 1px solid var(--primary, #0F2A44); }
+    .btn-navy:hover { opacity: 0.9; }
+    .btn-secondary { background: var(--surface, #FFFFFF); color: var(--text, #0F2A44); border: 1px solid var(--border, #CBD5E1); }
+    .btn-secondary:hover { background: var(--hover, #F1F5F9); }
+
+    .demo-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+    .tag-returned { background: rgba(245, 158, 11, 0.15); color: #D97706; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .tag-routing { background: rgba(8, 145, 178, 0.15); color: #0891B2; border: 1px solid rgba(8, 145, 178, 0.3); }
+
+    .demo-alert { padding: 10px 14px; border-radius: 6px; font-size: 11px; display: flex; gap: 8px; }
+    .demo-alert-danger { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #DC2626; }
+    .demo-alert-success { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #059669; }
+
+    .demo-pane { padding: 14px 20px; }
+    .demo-pane-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .demo-link-btn { background: none; border: none; color: var(--accent, #2563EB); font-size: 12px; font-weight: 700; cursor: pointer; }
+    .demo-audit-events-list { display: flex; flex-direction: column; gap: 10px; }
+    .demo-audit-item { border-left: 2px solid var(--accent, #2563EB); padding-left: 10px; }
+    .demo-audit-time { font-size: 10px; color: var(--muted, #94A3B8); display: block; }
+    .demo-audit-act { font-size: 12px; color: var(--heading, #0F2A44); display: block; }
+    .demo-audit-desc { font-size: 11px; color: var(--muted, #64748B); margin: 0; }
+
+    .font-mono { font-family: monospace; }
+    .font-bold { font-weight: 700; }
+    .font-medium { font-weight: 600; }
+    .mt-3 { margin-top: 12px; }
+    .mt-4 { margin-top: 16px; }
+    .ml-2 { margin-left: 8px; }
+    .text-red { color: #DC2626; }
+    .text-right { text-align: right; }
+    .text-muted { color: var(--muted, #64748B); }
+
+    /* Dark Mode Overrides */
+    html[data-theme="dark"] .demo-ops-root {
+        color: #F5F5F7;
+        background: #09090B;
+    }
+    html[data-theme="dark"] .demo-card {
+        background: #1C1C1E;
+        border-color: rgba(235, 235, 245, 0.15);
+    }
+    html[data-theme="dark"] .demo-bc-bold,
+    html[data-theme="dark"] .demo-bc-current,
+    html[data-theme="dark"] .demo-main-title,
+    html[data-theme="dark"] .demo-collapsed-title,
+    html[data-theme="dark"] .demo-filter-title,
+    html[data-theme="dark"] .demo-panel-title,
+    html[data-theme="dark"] .demo-user-badge,
+    html[data-theme="dark"] .demo-audit-act,
+    html[data-theme="dark"] .empty-title,
+    html[data-theme="dark"] .field-value {
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .demo-ghost-btn,
+    html[data-theme="dark"] .btn-secondary,
+    html[data-theme="dark"] .demo-viewer-tab-btn {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.18);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .demo-ghost-btn:hover,
+    html[data-theme="dark"] .btn-secondary:hover {
+        background: #2C2C2E;
+    }
+    html[data-theme="dark"] .demo-data-table th {
+        background: #242426;
+        color: #A1A1A6;
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .demo-data-table td {
+        border-color: rgba(235, 235, 245, 0.08);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .demo-clickable-row:hover {
+        background: rgba(255, 255, 255, 0.06);
+    }
+    html[data-theme="dark"] .demo-clickable-row.row-selected {
+        background: rgba(10, 132, 255, 0.18);
+    }
+    html[data-theme="dark"] .demo-input,
+    html[data-theme="dark"] .demo-textarea {
+        background: #141416;
+        border-color: rgba(235, 235, 245, 0.2);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .demo-field-group,
+    html[data-theme="dark"] .demo-cheque-image-frame,
+    html[data-theme="dark"] .demo-summary-collapsed-row {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .btn-navy {
+        background: #0A84FF;
+        border-color: #0A84FF;
+        color: #FFFFFF;
+    }
+    html[data-theme="dark"] .demo-viewer-tab-btn.active {
+        background: #0A84FF;
+        border-color: #0A84FF;
+        color: #FFFFFF;
+    }
+    html[data-theme="dark"] .demo-table-panel-header,
+    html[data-theme="dark"] .demo-col-header,
+    html[data-theme="dark"] .demo-filter-grid {
+        border-color: rgba(235, 235, 245, 0.1);
+    }
+</style>
+
+@code {
+    private bool _infoCollapsed = false;
+    private bool _summaryCollapsed = false;
+    private bool _filtersCollapsed = false;
+    private bool _auditOpen = true;
+
+    private string _filterChequeNo = "";
+    private string _filterAmount = "";
+    private string _filterMicrAccount = "";
+    private string _filterRouting = "";
+    private string _filterCustomerAccount = "";
+
+    private string _imageView = "front";
+    private string _checkerRemarks = "";
+    private string _message = "";
+    private string _successMessage = "";
+
+    private List<ReturnCheckerItem> _cheques = [];
+    private string _selectedId = "";
+
+    private ReturnCheckerItem? SelectedCheque => _cheques.FirstOrDefault(c => c.Id == _selectedId);
+
+    private decimal TotalQueueAmount => FilteredRows.Sum(c => c.Amount);
+
+    private string CurrentChequeImageUrl => SelectedCheque == null 
+        ? "/placeholders/cheque-001.svg" 
+        : (_imageView == "rear" ? "/placeholders/cheque-rear.svg" : "/placeholders/cheque-001.svg");
+
+    private List<ReturnCheckerItem> FilteredRows => _cheques.Where(c =>
+        (string.IsNullOrWhiteSpace(_filterChequeNo) || c.ChequeNo.Contains(_filterChequeNo, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterAmount) || c.Amount.ToString().Contains(_filterAmount, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterMicrAccount) || c.MicrAccountNo.Contains(_filterMicrAccount, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterRouting) || c.RoutingNumber.Contains(_filterRouting, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterCustomerAccount) || c.CustomerAccount.Contains(_filterCustomerAccount, StringComparison.OrdinalIgnoreCase))
+    ).ToList();
+
+    private List<ReturnCheckerAuditEvent> _auditEvents = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var result = await Client.QueueAsync(new("MANUAL_RETURN_CHECKER", 1, 50, null, null));
+            if (result.IsSuccess && result.Data?.Items != null && result.Data.Items.Count > 0)
+            {
+                _cheques = result.Data.Items.Select(item => new ReturnCheckerItem
+                {
+                    Id = item.ChequeId,
+                    ChequeNo = item.ChequeNo,
+                    Amount = item.Amount,
+                    MakerDecision = "Return",
+                    Reason = item.RejectReason ?? "Account Closed",
+                    Remarks = "Maker returned instrument",
+                    RequestedTime = item.UpdatedAtUtc.ToLocalTime().ToString("M/d/yyyy, h:mm:ss tt"),
+                    RoutingNumber = "100001",
+                    MicrAccountNo = item.AccountNo,
+                    CustomerAccount = item.AccountNo,
+                    DrawerAccount = item.AccountNo,
+                    AccountName = "Customer Account",
+                    Branch = item.BranchCode ?? "Branch 001",
+                    Balance = 2500000.00m,
+                    Uic = $"20260601-AYDB-001-SCN01-0103-{item.ChequeNo}"
+                }).ToList();
+            }
+        }
+        catch { }
+
+        // Start with empty queue as in user screenshot "No records found"
+        // If an item is present, user can inspect and review it.
+    }
+
+    private void SelectCheque(ReturnCheckerItem item)
+    {
+        _selectedId = item.Id;
+        _message = "";
+        _successMessage = "";
+    }
+
+    private void RunCutoffAutoAccept()
+    {
+        _successMessage = "Cutoff Auto-Accept simulation ran. All pending eligible inward instruments checked.";
+        _auditEvents.Insert(0, new()
+        {
+            Timestamp = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt"),
+            User = "admin1",
+            Action = "Cutoff Auto-Accept Executed",
+            Description = "Manual return cutoff auto-accept cycle executed."
+        });
+    }
+
+    private async Task ApproveReturn()
+    {
+        if (SelectedCheque == null) return;
+        _message = "";
+        _successMessage = "";
+
+        try
+        {
+            await Client.ActionAsync(new(SelectedCheque.Id, "APPROVE_RETURN", _checkerRemarks));
+        }
+        catch { }
+
+        _auditEvents.Insert(0, new()
+        {
+            Timestamp = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt"),
+            User = "admin1",
+            Action = "Return Approved",
+            Description = $"Cheque {SelectedCheque.ChequeNo} return approved. Routed to Return ICL Creation."
+        });
+
+        _successMessage = $"Cheque {SelectedCheque.ChequeNo} approved for return and routed to Return ICL Creation.";
+        _cheques.Remove(SelectedCheque);
+        _selectedId = _cheques.FirstOrDefault()?.Id ?? "";
+    }
+
+    private async Task RejectReturn()
+    {
+        if (SelectedCheque == null) return;
+        _message = "";
+        _successMessage = "";
+
+        try
+        {
+            await Client.ActionAsync(new(SelectedCheque.Id, "REJECT_RETURN", _checkerRemarks));
+        }
+        catch { }
+
+        _auditEvents.Insert(0, new()
+        {
+            Timestamp = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt"),
+            User = "admin1",
+            Action = "Return Rejected",
+            Description = $"Cheque {SelectedCheque.ChequeNo} return rejected by checker. Routed to Debit Posting."
+        });
+
+        _successMessage = $"Cheque {SelectedCheque.ChequeNo} return rejected and redirected to Debit Posting.";
+        _cheques.Remove(SelectedCheque);
+        _selectedId = _cheques.FirstOrDefault()?.Id ?? "";
+    }
+
+    public sealed class ReturnCheckerItem
+    {
+        public string Id { get; set; } = string.Empty;
+        public string ChequeNo { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string MakerDecision { get; set; } = "Return";
+        public string Reason { get; set; } = string.Empty;
+        public string Remarks { get; set; } = string.Empty;
+        public string RequestedTime { get; set; } = string.Empty;
+        public string RoutingNumber { get; set; } = string.Empty;
+        public string MicrAccountNo { get; set; } = string.Empty;
+        public string CustomerAccount { get; set; } = string.Empty;
+        public string DrawerAccount { get; set; } = string.Empty;
+        public string AccountName { get; set; } = string.Empty;
+        public string Branch { get; set; } = string.Empty;
+        public decimal Balance { get; set; }
+        public string Uic { get; set; } = string.Empty;
+    }
+
+    public sealed class ReturnCheckerAuditEvent
+    {
+        public string Timestamp { get; set; } = string.Empty;
+        public string User { get; set; } = string.Empty;
+        public string Action { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+    }
+}

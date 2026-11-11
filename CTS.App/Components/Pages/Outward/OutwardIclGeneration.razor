@@ -1,0 +1,1164 @@
+@page "/outward/icl-generation"
+@attribute [Authorize]
+@inject WorkspaceApiService Client
+@inject NavigationManager Navigation
+
+@*
+// Origin Code:
+// @page "/outward/icl-generation"
+// @attribute [Authorize]
+// <WorkflowWorkspace Workstep="ICL_FILE_GENERATION" />
+*@
+
+@* // New Code by KK *@
+<PageTitle>ICL File Generation · ACE CTS</PageTitle>
+
+<div class="demo-ops-root">
+    @* Top Workspace Header *@
+    <div class="demo-top-bar">
+        <div class="demo-breadcrumbs">
+            <span class="demo-bc-bold">ACE CTS Workspace</span>
+            <span class="demo-meta-text">
+                <span class="demo-icon">📅</span> Business date 2026-06-23
+                <span class="demo-icon ml-2">🏛</span> Head Office
+                <span class="demo-icon ml-2">Role:</span> ADMIN
+            </span>
+        </div>
+        <div class="demo-top-badges">
+            <span class="demo-audit-badge">Audit events: <strong>58</strong></span>
+            <span class="demo-user-badge">admin1</span>
+        </div>
+    </div>
+
+    @* Title Bar *@
+    <div class="demo-title-bar">
+        <div class="demo-title-cluster">
+            <h1 class="demo-main-title">ICL File Generation</h1>
+            <span class="demo-chip chip-online">Online</span>
+            <span class="demo-chip chip-cyan">BRANCH <strong>Head Office</strong></span>
+            <span class="demo-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+            <span class="demo-chip chip-blue">DATE <strong>2026-09-09</strong></span>
+        </div>
+        <button class="demo-ghost-btn" @onclick="() => _showInfo = !_showInfo">
+            <span class="demo-icon">⚙</span> @(_showInfo ? "Hide Info" : "Show Info")
+        </button>
+    </div>
+
+    @* Expandable Info Drawer *@
+    @if (_showInfo)
+    {
+        <div class="demo-info-drawer">
+            <div class="demo-info-item"><span>Service Status:</span> <strong>Active &amp; Polling</strong></div>
+            <div class="demo-info-item"><span>File Standard:</span> <strong>ANSI X9.37 / Image Cash Letter</strong></div>
+            <div class="demo-info-item"><span>Poll Interval:</span> <strong>10 seconds</strong></div>
+            <div class="demo-info-item"><span>Forward Workstep:</span> <strong>ICL_FILE_GENERATION</strong></div>
+        </div>
+    }
+
+    @* Service Operations Control Strip *@
+    <div class="demo-card demo-service-strip">
+        <div class="demo-service-left">
+            <div class="demo-clock-icon">🕒</div>
+            <div>
+                <strong class="demo-service-title">Service Operations Control</strong>
+                <span class="demo-service-subtitle">Last run: @_lastRunTime</span>
+            </div>
+        </div>
+        <div class="demo-service-right">
+            <button class="demo-action-btn btn-navy" disabled="@_runningTick" @onclick="RunTick">
+                <span>▶</span>
+                <span>@(_runningTick ? "Running..." : "Run Service Tick")</span>
+            </button>
+            <label class="demo-service-toggle">
+                <input type="checkbox" @bind="_autoRun" />
+                <span>Auto-run @(_autoRun ? "On" : "Off")</span>
+            </label>
+            <span class="demo-pill pill-poll">Poll 10s</span>
+            <span class="demo-pill pill-result">Last result: @_serviceResult</span>
+            <span class="demo-pill pill-error">Last error: None</span>
+        </div>
+    </div>
+
+    @* KPI Summary Strip *@
+    <div class="demo-summary-row">
+        <div class="demo-pills-wrap">
+            <span class="demo-summary-pill pill-cyan">READY CHEQUES <strong>@_readyCheques.Count</strong></span>
+            <span class="demo-summary-pill pill-blue">READY AMOUNT <strong>MMK @ReadyTotalAmount.ToString("N0")</strong></span>
+            <span class="demo-summary-pill pill-green">GENERATED FILES <strong>@_generatedFiles.Count</strong></span>
+            <span class="demo-summary-pill pill-purple">FILE PATH <strong>C:\CTS\Outward\Upload\</strong></span>
+        </div>
+        <button class="demo-ghost-btn" @onclick="() => _showSummary = !_showSummary">
+            <span class="demo-icon">👁</span> @(_showSummary ? "Hide Summary" : "Show Summary")
+        </button>
+    </div>
+
+    @* Expandable Summary Drawer *@
+    @if (_showSummary)
+    {
+        <div class="demo-summary-drawer">
+            <div class="demo-summary-metric">
+                <span>Total Ready Cheques</span>
+                <strong>@_readyCheques.Count cheques</strong>
+            </div>
+            <div class="demo-summary-metric">
+                <span>Ready Amount</span>
+                <strong class="text-emerald">MMK @ReadyTotalAmount.ToString("N0")</strong>
+            </div>
+            <div class="demo-summary-metric">
+                <span>Generated Files in Cycle</span>
+                <strong>@_generatedFiles.Count files</strong>
+            </div>
+            <div class="demo-summary-metric">
+                <span>Clearing Target Path</span>
+                <strong>C:\CTS\Outward\Upload\</strong>
+            </div>
+        </div>
+    }
+
+    @* Latest Generated File Box (MMDB_OUT_20260818_004.icl) *@
+    @if (LatestGeneratedFile is not null)
+    {
+        <div class="demo-card demo-file-card">
+            <div class="demo-file-header">
+                <h3 class="demo-file-name">@LatestGeneratedFile.FileName</h3>
+                <span class="demo-tag tag-uploaded">@LatestGeneratedFile.Status</span>
+            </div>
+            <div class="demo-file-grid">
+                <div class="demo-file-stat-box">
+                    <span class="demo-stat-label">CHEQUE COUNT</span>
+                    <strong class="demo-stat-val">@LatestGeneratedFile.ChequeCount</strong>
+                </div>
+                <div class="demo-file-stat-box">
+                    <span class="demo-stat-label">TOTAL AMOUNT</span>
+                    <strong class="demo-stat-val">@LatestGeneratedFile.TotalAmount.ToString("N2")</strong>
+                </div>
+                <div class="demo-file-stat-box">
+                    <span class="demo-stat-label">PATH</span>
+                    <strong class="demo-stat-val demo-stat-path">@LatestGeneratedFile.LocalPath</strong>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* ICL Generation Queue Panel *@
+    <div class="demo-card demo-table-panel">
+        <div class="demo-panel-title">ICL Generation Queue</div>
+        <div class="demo-table-wrapper">
+            <table class="demo-data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">CHEQUE NO</th>
+                        <th style="width: 25%;">BATCH</th>
+                        <th style="width: 25%;">AMOUNT</th>
+                        <th style="width: 25%;">WORKSTEP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_readyCheques.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="4" class="demo-empty-container">
+                                <div class="demo-empty-icon">📄</div>
+                                <div class="demo-empty-title">No records found</div>
+                                <div class="demo-empty-sub">Adjust filters or run the relevant demo service to create workitems.</div>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var chq in _readyCheques)
+                        {
+                            <tr>
+                                <td class="font-bold text-blue">@chq.ChequeNo</td>
+                                <td class="font-mono">@chq.BatchNo</td>
+                                <td>@chq.Amount.ToString("N2")</td>
+                                <td>ICL Generation</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @* Generated Forward Upload Files Panel *@
+    <div class="demo-card demo-table-panel">
+        <div class="demo-panel-title">Generated Forward Upload Files</div>
+        <div class="demo-table-wrapper">
+            <table class="demo-data-table">
+                <thead>
+                    <tr>
+                        <th>ICL FILE NAME</th>
+                        <th>CHEQUE COUNT</th>
+                        <th>TOTAL AMOUNT</th>
+                        <th>GENERATED DATE/TIME</th>
+                        <th>LOCAL PATH</th>
+                        <th>STATUS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var file in _generatedFiles)
+                    {
+                        <tr>
+                            <td class="font-mono text-slate">@file.FileName</td>
+                            <td>@file.ChequeCount</td>
+                            <td>@file.TotalAmount.ToString("N0")</td>
+                            <td>@file.CreatedAtString</td>
+                            <td class="font-mono text-muted">@file.LocalPath</td>
+                            <td>
+                                <span class="demo-tag @(file.Status == "Uploaded" ? "tag-uploaded" : "tag-generated")">
+                                    @file.Status
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @* Audit Timeline Panel *@
+    <div class="demo-card demo-pane">
+        <div class="demo-pane-header">
+            <div>
+                <h3 class="demo-pane-title">Audit Timeline</h3>
+                <span class="demo-pane-sub">8 audit event(s)</span>
+            </div>
+            <button class="demo-link-btn" @onclick="() => _auditOpen = !_auditOpen">
+                @(_auditOpen ? "⌃ Close Audit" : "⌄ Open Audit")
+            </button>
+        </div>
+
+        @if (_auditOpen)
+        {
+            <div class="demo-audit-events-list">
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">9/9/2026, 3:42:20 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Run Service Tick</strong>
+                    <p class="demo-audit-desc">No eligible outward service workitems found.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:52:15 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Return ICL Upload File Generated</strong>
+                    <p class="demo-audit-desc">MMDB_RETURN_20260819_006.icl created for CBM.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:51:27 PM · Admin One</span>
+                    <strong class="demo-audit-act">Complete Inward NAK Repair</strong>
+                    <p class="demo-audit-desc">120103 returned to return ICL creation.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:51:08 PM · Admin One</span>
+                    <strong class="demo-audit-act">Complete Inward NAK Repair</strong>
+                    <p class="demo-audit-desc">120099 returned to return ICL creation.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:01:55 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Return ICL Upload File Generated</strong>
+                    <p class="demo-audit-desc">MMDB_RETURN_20260819_005.icl created for CBM.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:01:04 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Return ICL Creation</strong>
+                    <p class="demo-audit-desc">No inward return instruments ready for file creation.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 3:00:57 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Return ICL Creation</strong>
+                    <p class="demo-audit-desc">No inward return instruments ready for file creation.</p>
+                </div>
+                <div class="demo-audit-item">
+                    <span class="demo-audit-time">8/19/2026, 2:38:17 PM · CTS Background Service</span>
+                    <strong class="demo-audit-act">Return ICL Creation</strong>
+                    <p class="demo-audit-desc">No inward return instruments ready for file creation.</p>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@* Exact CSS replicating Vercel Demo OutwardIclGeneration screenshot *@
+@*
+// Original Code
+// ( Original Code, before fixing )
+<style>
+    .demo-ops-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #172033;
+        background: #F5F7FA;
+        min-height: calc(100vh - 80px);
+        padding: 16px 24px 60px;
+        box-sizing: border-box;
+    }
+    .demo-ops-root * { box-sizing: border-box; }
+
+    /* Top bar */
+    .demo-top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+    }
+    .demo-breadcrumbs {
+        font-size: 13px;
+        color: #667085;
+    }
+    .demo-bc-bold { font-weight: 700; color: #172033; margin-right: 12px; }
+    .demo-meta-text { font-size: 12px; color: #64748B; }
+    .demo-icon { opacity: 0.8; }
+    .ml-2 { margin-left: 10px; }
+
+    .demo-top-badges {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .demo-audit-badge, .demo-user-badge {
+        font-size: 12px;
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 4px 10px;
+        color: #172033;
+    }
+    .demo-user-badge { font-weight: 700; }
+
+    /* Title Bar */
+    .demo-title-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+    }
+    .demo-title-cluster {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .demo-main-title {
+        font-size: 20px;
+        font-weight: 800;
+        margin: 0;
+        color: #0F2A44;
+        letter-spacing: -0.01em;
+    }
+    .demo-chip {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .chip-online { background: #E0F2FE; color: #0284C7; border: 1px solid #BAE6FD; }
+    .chip-cyan { background: #E0F2FE; color: #0369A1; border: 1px solid #BAE6FD; }
+    .chip-blue { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+
+    .demo-ghost-btn {
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #172033;
+        cursor: pointer;
+    }
+    .demo-ghost-btn:hover { background: #F8FAFC; }
+
+    .demo-info-drawer, .demo-summary-drawer {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px;
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-bottom: 16px;
+        font-size: 12px;
+    }
+    .demo-info-item span { color: #64748B; margin-right: 6px; }
+    .demo-summary-metric span { display: block; color: #64748B; font-size: 11px; }
+    .demo-summary-metric strong { display: block; font-size: 15px; color: #0F2A44; margin-top: 2px; }
+    .text-emerald { color: #059669 !important; }
+
+    /* Base Card */
+    .demo-card {
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+        box-shadow: 0 1px 3px rgba(15, 42, 68, 0.05);
+    }
+
+    /* Service strip */
+    .demo-service-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 12px 18px;
+    }
+    .demo-service-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .demo-clock-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #ECFDF5;
+        color: #059669;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+    }
+    .demo-service-title {
+        display: block;
+        font-size: 13px;
+        font-weight: 800;
+        color: #0F2A44;
+    }
+    .demo-service-subtitle {
+        display: block;
+        font-size: 11px;
+        color: #64748B;
+    }
+
+    .demo-service-right {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .demo-action-btn {
+        height: 36px;
+        padding: 0 14px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid transparent;
+        transition: all 0.15s;
+    }
+    .btn-navy { background: #0F2A44; color: #FFFFFF; border-color: #0F2A44; }
+    .btn-navy:hover { background: #1E4E79; }
+    .btn-navy:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .demo-service-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 0 10px;
+        height: 36px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #0F2A44;
+        cursor: pointer;
+    }
+
+    .demo-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 36px;
+        padding: 0 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .pill-poll { background: #F8FAFC; border: 1px solid #E2E8F0; color: #0F2A44; }
+    .pill-result { background: #ECFDF5; border: 1px solid #A7F3D0; color: #047857; }
+    .pill-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; }
+
+    /* Summary strip */
+    .demo-summary-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+    .demo-pills-wrap {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .demo-summary-pill {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 5px 12px;
+        border-radius: 20px;
+        letter-spacing: 0.03em;
+    }
+    .pill-cyan { background: #E0F2FE; color: #0284C7; border: 1px solid #BAE6FD; }
+    .pill-blue { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
+    .pill-green { background: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0; }
+    .pill-purple { background: #F3E8FF; color: #7E22CE; border: 1px solid #E9D5FF; }
+
+    /* File Card */
+    .demo-file-card { padding: 18px 20px; }
+    .demo-file-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+    }
+    .demo-file-name {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin: 0;
+        font-family: monospace;
+    }
+    .demo-file-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+    }
+    @@media (max-width: 768px) { .demo-file-grid { grid-template-columns: 1fr; } }
+    .demo-file-stat-box {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 12px 14px;
+    }
+    .demo-stat-label {
+        font-size: 10px;
+        font-weight: 800;
+        color: #64748B;
+        letter-spacing: 0.05em;
+        display: block;
+    }
+    .demo-stat-val {
+        font-size: 18px;
+        font-weight: 900;
+        color: #0F2A44;
+        display: block;
+        margin-top: 4px;
+    }
+    .demo-stat-path { font-size: 13px; font-family: monospace; }
+
+    /* Panel Table */
+    .demo-table-panel { padding: 0; overflow: hidden; }
+    .demo-panel-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0F2A44;
+        padding: 14px 20px;
+        border-bottom: 1px solid #EEF2F6;
+    }
+    .demo-table-wrapper { width: 100%; overflow-x: auto; }
+    .demo-data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        text-align: left;
+    }
+    .demo-data-table th {
+        background: #F8FAFC;
+        color: #475569;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 10px 14px;
+        border-bottom: 1px solid #E2E8F0;
+        white-space: nowrap;
+    }
+    .demo-data-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid #EEF2F6;
+        color: #172033;
+        white-space: nowrap;
+    }
+
+    .demo-empty-container {
+        text-align: center;
+        padding: 40px 16px;
+    }
+    .demo-empty-icon { font-size: 28px; opacity: 0.6; margin-bottom: 6px; }
+    .demo-empty-title { font-size: 14px; font-weight: 700; color: #0F2A44; }
+    .demo-empty-sub { font-size: 11px; color: #64748B; margin-top: 2px; }
+
+    .demo-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 10px;
+        border-radius: 4px;
+    }
+    .tag-uploaded { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+    .tag-generated { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+
+    /* Audit */
+    .demo-pane { padding: 14px 20px; }
+    .demo-pane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #EEF2F6;
+        padding-bottom: 8px;
+    }
+    .demo-pane-title { font-size: 14px; font-weight: 800; color: #0F2A44; margin: 0; }
+    .demo-pane-sub { font-size: 11px; color: #64748B; }
+    .demo-link-btn {
+        background: none;
+        border: none;
+        color: #2563EB;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .demo-audit-events-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding-top: 8px;
+    }
+    .demo-audit-item {
+        border-left: 2px solid #2563EB;
+        padding-left: 10px;
+    }
+    .demo-audit-time { font-size: 10px; color: #94A3B8; display: block; }
+    .demo-audit-act { font-size: 12px; color: #0F2A44; display: block; margin: 1px 0; }
+    .demo-audit-desc { font-size: 11px; color: #64748B; margin: 0; }
+
+    .font-mono { font-family: monospace; }
+    .text-slate { color: #0F2A44; font-weight: 600; }
+    .text-muted { color: #64748B; }
+    .text-blue { color: #2563EB; }
+</style>
+*@
+
+@* // Code Added by KK *@
+<style>
+    .demo-ops-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #172033;
+        background: #F5F7FA;
+        min-height: calc(100vh - 80px);
+        padding: 16px 24px 60px;
+        box-sizing: border-box;
+    }
+    .demo-ops-root * { box-sizing: border-box; }
+
+    /* Top bar */
+    .demo-top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+    }
+    .demo-breadcrumbs {
+        font-size: 13px;
+        color: #667085;
+    }
+    .demo-bc-bold { font-weight: 700; color: #172033; margin-right: 12px; }
+    .demo-meta-text { font-size: 12px; color: #64748B; }
+    .demo-icon { opacity: 0.8; }
+    .ml-2 { margin-left: 10px; }
+
+    .demo-top-badges {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .demo-audit-badge, .demo-user-badge {
+        font-size: 12px;
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 4px 10px;
+        color: #172033;
+    }
+    .demo-user-badge { font-weight: 700; }
+
+    /* Title Bar */
+    .demo-title-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+    }
+    .demo-title-cluster {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .demo-main-title {
+        font-size: 20px;
+        font-weight: 800;
+        margin: 0;
+        color: #0F2A44;
+        letter-spacing: -0.01em;
+    }
+    .demo-chip {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .chip-online { background: #E0F2FE; color: #0284C7; border: 1px solid #BAE6FD; }
+    .chip-cyan { background: #E0F2FE; color: #0369A1; border: 1px solid #BAE6FD; }
+    .chip-blue { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+
+    .demo-ghost-btn {
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #172033;
+        cursor: pointer;
+    }
+    .demo-ghost-btn:hover { background: #F8FAFC; }
+
+    .demo-info-drawer, .demo-summary-drawer {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px;
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-bottom: 16px;
+        font-size: 12px;
+    }
+    .demo-info-item span { color: #64748B; margin-right: 6px; }
+    .demo-summary-metric span { display: block; color: #64748B; font-size: 11px; }
+    .demo-summary-metric strong { display: block; font-size: 15px; color: #0F2A44; margin-top: 2px; }
+    .text-emerald { color: #059669 !important; }
+
+    /* Base Card */
+    .demo-card {
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+        box-shadow: 0 1px 3px rgba(15, 42, 68, 0.05);
+    }
+
+    /* Service strip */
+    .demo-service-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 12px 18px;
+    }
+    .demo-service-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .demo-clock-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #ECFDF5;
+        color: #059669;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+    }
+    .demo-service-title {
+        display: block;
+        font-size: 13px;
+        font-weight: 800;
+        color: #0F2A44;
+    }
+    .demo-service-subtitle {
+        display: block;
+        font-size: 11px;
+        color: #64748B;
+    }
+
+    .demo-service-right {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .demo-action-btn {
+        height: 36px;
+        padding: 0 14px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid transparent;
+        transition: all 0.15s;
+    }
+    .btn-navy { background: #0F2A44; color: #FFFFFF; border-color: #0F2A44; }
+    .btn-navy:hover { background: #1E4E79; }
+    .btn-navy:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .demo-service-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 0 10px;
+        height: 36px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #0F2A44;
+        cursor: pointer;
+    }
+
+    .demo-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 36px;
+        padding: 0 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .pill-poll { background: #F8FAFC; border: 1px solid #E2E8F0; color: #0F2A44; }
+    .pill-result { background: #ECFDF5; border: 1px solid #A7F3D0; color: #047857; }
+    .pill-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; }
+
+    /* Summary strip */
+    .demo-summary-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+    .demo-pills-wrap {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .demo-summary-pill {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 5px 12px;
+        border-radius: 20px;
+        letter-spacing: 0.03em;
+    }
+    .pill-cyan { background: #E0F2FE; color: #0284C7; border: 1px solid #BAE6FD; }
+    .pill-blue { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
+    .pill-green { background: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0; }
+    .pill-purple { background: #F3E8FF; color: #7E22CE; border: 1px solid #E9D5FF; }
+
+    /* File Card */
+    .demo-file-card { padding: 18px 20px; }
+    .demo-file-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+    }
+    .demo-file-name {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin: 0;
+        font-family: monospace;
+    }
+    .demo-file-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+    }
+    @@media (max-width: 768px) { .demo-file-grid { grid-template-columns: 1fr; } }
+    .demo-file-stat-box {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 12px 14px;
+    }
+    .demo-stat-label {
+        font-size: 10px;
+        font-weight: 800;
+        color: #64748B;
+        letter-spacing: 0.05em;
+        display: block;
+    }
+    .demo-stat-val {
+        font-size: 18px;
+        font-weight: 900;
+        color: #0F2A44;
+        display: block;
+        margin-top: 4px;
+    }
+    .demo-stat-path { font-size: 13px; font-family: monospace; }
+
+    /* Panel Table */
+    .demo-table-panel { padding: 0; overflow: hidden; }
+    .demo-panel-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0F2A44;
+        padding: 14px 20px;
+        border-bottom: 1px solid #EEF2F6;
+    }
+    .demo-table-wrapper { width: 100%; overflow-x: auto; }
+    .demo-data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        text-align: left;
+    }
+    .demo-data-table th {
+        background: #F8FAFC;
+        color: #475569;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 10px 14px;
+        border-bottom: 1px solid #E2E8F0;
+        white-space: nowrap;
+    }
+    .demo-data-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid #EEF2F6;
+        color: #172033;
+        white-space: nowrap;
+    }
+
+    .demo-empty-container {
+        text-align: center;
+        padding: 40px 16px;
+    }
+    .demo-empty-icon { font-size: 28px; opacity: 0.6; margin-bottom: 6px; }
+    .demo-empty-title { font-size: 14px; font-weight: 700; color: #0F2A44; }
+    .demo-empty-sub { font-size: 11px; color: #64748B; margin-top: 2px; }
+
+    .demo-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 10px;
+        border-radius: 4px;
+    }
+    .tag-uploaded { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+    .tag-generated { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+
+    /* Audit */
+    .demo-pane { padding: 14px 20px; }
+    .demo-pane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #EEF2F6;
+        padding-bottom: 8px;
+    }
+    .demo-pane-title { font-size: 14px; font-weight: 800; color: #0F2A44; margin: 0; }
+    .demo-pane-sub { font-size: 11px; color: #64748B; }
+    .demo-link-btn {
+        background: none;
+        border: none;
+        color: #2563EB;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .demo-audit-events-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding-top: 8px;
+    }
+    .demo-audit-item {
+        border-left: 2px solid #2563EB;
+        padding-left: 10px;
+    }
+    .demo-audit-time { font-size: 10px; color: #94A3B8; display: block; }
+    .demo-audit-act { font-size: 12px; color: #0F2A44; display: block; margin: 1px 0; }
+    .demo-audit-desc { font-size: 11px; color: #64748B; margin: 0; }
+
+    .font-mono { font-family: monospace; }
+    .text-slate { color: #0F2A44; font-weight: 600; }
+    .text-muted { color: #64748B; }
+    .text-blue { color: #2563EB; }
+
+    /* Dark Mode Overrides */
+    html[data-theme="dark"] .demo-ops-root {
+        background: var(--bg-canvas, #0b1329) !important;
+        color: var(--text, #f1f5f9) !important;
+    }
+    html[data-theme="dark"] .demo-bc-bold,
+    html[data-theme="dark"] .demo-main-title,
+    html[data-theme="dark"] .demo-panel-title,
+    html[data-theme="dark"] .demo-service-title,
+    html[data-theme="dark"] .demo-file-name,
+    html[data-theme="dark"] .demo-stat-val,
+    html[data-theme="dark"] .demo-empty-title,
+    html[data-theme="dark"] .demo-pane-title,
+    html[data-theme="dark"] .demo-audit-act,
+    html[data-theme="dark"] .text-slate {
+        color: #f8fafc !important;
+    }
+    html[data-theme="dark"] .demo-breadcrumbs,
+    html[data-theme="dark"] .demo-meta-text,
+    html[data-theme="dark"] .demo-service-subtitle,
+    html[data-theme="dark"] .demo-empty-sub,
+    html[data-theme="dark"] .demo-pane-sub,
+    html[data-theme="dark"] .demo-audit-desc,
+    html[data-theme="dark"] .text-muted,
+    html[data-theme="dark"] .demo-stat-label {
+        color: #94a3b8 !important;
+    }
+    html[data-theme="dark"] .demo-card {
+        background: var(--surface-solid, #131f37) !important;
+        border-color: var(--border, #1e293b) !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
+    }
+    html[data-theme="dark"] .demo-audit-badge,
+    html[data-theme="dark"] .demo-user-badge,
+    html[data-theme="dark"] .demo-ghost-btn,
+    html[data-theme="dark"] .demo-service-toggle {
+        background: #1e293b !important;
+        border-color: #334155 !important;
+        color: #f1f5f9 !important;
+    }
+    html[data-theme="dark"] .demo-ghost-btn:hover,
+    html[data-theme="dark"] .demo-service-toggle:hover {
+        background: #27354f !important;
+    }
+    html[data-theme="dark"] .demo-info-drawer,
+    html[data-theme="dark"] .demo-summary-drawer,
+    html[data-theme="dark"] .demo-file-stat-box {
+        background: #0f172a !important;
+        border-color: #1e293b !important;
+    }
+    html[data-theme="dark"] .demo-info-item span,
+    html[data-theme="dark"] .demo-summary-metric span {
+        color: #94a3b8 !important;
+    }
+    html[data-theme="dark"] .demo-summary-metric strong {
+        color: #f1f5f9 !important;
+    }
+    html[data-theme="dark"] .demo-panel-title,
+    html[data-theme="dark"] .demo-pane-header {
+        border-bottom-color: #1e293b !important;
+    }
+    html[data-theme="dark"] .demo-data-table th {
+        background: #0f172a !important;
+        color: #cbd5e1 !important;
+        border-bottom-color: #1e293b !important;
+    }
+    html[data-theme="dark"] .demo-data-table td {
+        border-bottom-color: #1e293b !important;
+        color: #e2e8f0 !important;
+    }
+    html[data-theme="dark"] .btn-navy {
+        background: #2563eb !important;
+        border-color: #3b82f6 !important;
+        color: #ffffff !important;
+    }
+    html[data-theme="dark"] .btn-navy:hover {
+        background: #1d4ed8 !important;
+    }
+    html[data-theme="dark"] .pill-poll {
+        background: #1e293b !important;
+        border-color: #334155 !important;
+        color: #cbd5e1 !important;
+    }
+</style>
+
+@code {
+    private bool _showInfo;
+    private bool _showSummary;
+    private bool _autoRun;
+    private bool _runningTick;
+    private bool _auditOpen = true;
+
+    private string _lastRunTime = "Not run this session";
+    private string _serviceResult = "0 cheque(s) ready for forward upload file generation.";
+
+    private List<DemoChequeModel> _readyCheques = [];
+    private List<DemoIclFileModel> _generatedFiles = [];
+
+    protected override void OnInitialized()
+    {
+        _readyCheques = [];
+
+        _generatedFiles =
+        [
+            new()
+            {
+                FileName = "MMDB_OUT_20260818_004.icl",
+                ChequeCount = 4,
+                TotalAmount = 6985000m,
+                CreatedAtString = "8/18/2026, 2:09:53 PM",
+                LocalPath = @"C:\CTS\Outward\Upload\",
+                Status = "Uploaded"
+            },
+            new()
+            {
+                FileName = "MMDB_OUT_20260601_001.icl",
+                ChequeCount = 0,
+                TotalAmount = 0m,
+                CreatedAtString = "2026-06-01 12:10",
+                LocalPath = @"C:\CTS\Outward\Upload\",
+                Status = "Generated"
+            }
+        ];
+    }
+
+    private decimal ReadyTotalAmount => _readyCheques.Sum(c => c.Amount);
+    private DemoIclFileModel? LatestGeneratedFile => _generatedFiles.FirstOrDefault();
+
+    private async Task RunTick()
+    {
+        _runningTick = true;
+        await Task.Delay(350);
+        _lastRunTime = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt");
+        _serviceResult = "0 cheque(s) ready for forward upload file generation.";
+        _runningTick = false;
+    }
+
+    private sealed class DemoChequeModel
+    {
+        public string ChequeNo { get; set; } = string.Empty;
+        public string BatchNo { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+    }
+
+    private sealed class DemoIclFileModel
+    {
+        public string FileName { get; set; } = string.Empty;
+        public int ChequeCount { get; set; }
+        public decimal TotalAmount { get; set; }
+        public string CreatedAtString { get; set; } = string.Empty;
+        public string LocalPath { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+    }
+}

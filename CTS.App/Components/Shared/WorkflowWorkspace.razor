@@ -1,0 +1,375 @@
+@inject WorkspaceApiService Client
+
+<PageTitle>@_presentation.Title · ACE CTS</PageTitle>
+
+<PageHeader Section="@SectionTitle" Title="@_presentation.Title" Subtitle="@_presentation.Subtitle" Badge="@($"{_queue?.TotalCount ?? 0} items")">
+    <button class="secondary-button" disabled="@_loading" @onclick="LoadQueueAsync">↻ Refresh</button>
+</PageHeader>
+
+<ol class="process-progress" aria-label="@($"{SectionTitle} workflow progress")">
+    @for (var index = 0; index < _presentation.Stages.Count; index++)
+    {
+        var state = index < _presentation.ActiveStage ? "complete" : index == _presentation.ActiveStage ? "active" : null;
+        <li class="@state" aria-current="@(index == _presentation.ActiveStage ? "step" : null)">
+            <span>@(index + 1)</span>
+            <strong>@_presentation.Stages[index]</strong>
+        </li>
+    }
+</ol>
+
+@if (_queue is null)
+{
+    <LoadingState Error="@_error" />
+}
+else
+{
+    <section class="workflow-summary" aria-label="Current queue summary">
+        <article><span>Queue items</span><strong>@_queue.TotalCount.ToString("N0")</strong><small>@_presentation.QueueTitle</small></article>
+        <article><span>Visible amount</span><strong>@VisibleAmount.ToString("N0")</strong><small>MMK across this result page</small></article>
+        <article><span>Exceptions</span><strong>@ExceptionCount.ToString("N0")</strong><small>Items requiring attention</small></article>
+        <article><span>Last refreshed</span><strong>@_lastRefreshed.ToString("HH:mm")</strong><small>@_lastRefreshed.ToString("dd MMM yyyy")</small></article>
+    </section>
+
+    @switch (_presentation.Surface)
+    {
+        case WorkflowSurface.Capture:
+            <section class="operation-hero capture-surface">
+                <div class="operation-icon" aria-hidden="true">@_presentation.Icon</div>
+                <div class="operation-copy"><span class="eyebrow">CAPTURE DEVICE</span><h2>@_presentation.OperationTitle</h2><p>@_presentation.OperationHint</p></div>
+                <div class="operation-facts"><span><i class="online"></i> Scanner online</span><span>300 DPI · Grayscale</span><span>Front / rear capture</span></div>
+                <button class="primary-button" @onclick="SimulateCapture">@_presentation.OperationVerb</button>
+            </section>
+            break;
+        case WorkflowSurface.Upload:
+            <section class="operation-hero upload-surface">
+                <div class="operation-icon" aria-hidden="true">@_presentation.Icon</div>
+                <div class="operation-copy"><span class="eyebrow">FILE INTAKE</span><h2>@_presentation.OperationTitle</h2><p>@_presentation.OperationHint</p></div>
+                <label class="file-picker">
+                    <span>@(_selectedFile ?? "Choose .icl or .xml file")</span>
+                    <InputFile OnChange="HandleFileSelected" accept=".icl,.xml,.txt" />
+                </label>
+                <button class="primary-button" disabled="@(_selectedId is null || _selectedFile is null)" @onclick="RequestPrimaryAction">@_presentation.OperationVerb</button>
+            </section>
+            break;
+        case WorkflowSurface.Service:
+            <section class="operation-hero service-surface">
+                <div class="operation-icon" aria-hidden="true">@_presentation.Icon</div>
+                <div class="operation-copy"><span class="eyebrow">SERVICE OPERATIONS</span><h2>@_presentation.OperationTitle</h2><p>@_presentation.OperationHint</p></div>
+                <dl class="operation-output"><div><dt>Last run</dt><dd>@(_lastRun?.ToString("dd MMM, HH:mm") ?? "Not run")</dd></div><div><dt>Output</dt><dd>@(_generatedFileName ?? "Pending")</dd></div><div><dt>Path</dt><dd>@_presentation.OutputPath</dd></div></dl>
+                <button class="primary-button" disabled="@(_selectedId is null || PrimaryAction is null || _processing)" @onclick="RequestPrimaryAction">@_presentation.OperationVerb</button>
+            </section>
+            break;
+        case WorkflowSurface.Response:
+            <section class="operation-hero response-surface">
+                <div class="operation-icon" aria-hidden="true">@_presentation.Icon</div>
+                <div class="operation-copy"><span class="eyebrow">CLEARING-HOUSE RESPONSE</span><h2>@_presentation.OperationTitle</h2><p>@_presentation.OperationHint</p></div>
+                <div class="response-legend"><span class="ack">ACK · Accept</span><span class="nak">NAK · Repair</span></div>
+                <button class="secondary-button" disabled="@(_selectedId is null)" @onclick="ScrollToDecision">@_presentation.OperationVerb</button>
+            </section>
+            break;
+        case WorkflowSurface.Monitor:
+            <section class="operation-hero monitor-surface">
+                <div class="operation-icon" aria-hidden="true">@_presentation.Icon</div>
+                <div class="operation-copy"><span class="eyebrow">RETURN WINDOW</span><h2>@_presentation.OperationTitle</h2><p>@_presentation.OperationHint</p></div>
+                <div class="countdown-card"><span>Monitoring state</span><strong>Open</strong><small>Next polling cycle in 30 seconds</small></div>
+                <button class="secondary-button" @onclick="LoadQueueAsync">Check now</button>
+            </section>
+            break;
+        default:
+            <section class="operation-hero review-surface">
+                <div class="operation-icon" aria-hidden="true">@_presentation.Icon</div>
+                <div class="operation-copy"><span class="eyebrow">CONTROLLED REVIEW</span><h2>@_presentation.OperationTitle</h2><p>@_presentation.OperationHint</p></div>
+                <div class="operation-facts"><span>Maker / checker trail</span><span>Image and MICR review</span><span>Audited decision</span></div>
+                <button class="secondary-button" disabled="@(_selectedId is null)" @onclick="ScrollToDecision">@_presentation.OperationVerb</button>
+            </section>
+            break;
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_notice))
+    {
+        <div class="alert" role="status"><strong>Completed</strong><span>@_notice</span></div>
+    }
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert danger" role="alert"><strong>Action required</strong><span>@_error</span></div>
+    }
+
+    <section class="panel workflow-queue-panel">
+        <div class="panel-heading">
+            <div><span class="eyebrow">WORK QUEUE</span><h2>@_presentation.QueueTitle</h2><p>@_queue.Description</p></div>
+            <StatusPill Status="@(_queue.TotalCount > 0 ? "Open" : "Clear")" />
+        </div>
+        <div class="filter-bar">
+            <div class="search-field"><span aria-hidden="true">⌕</span><label class="sr-only" for="workflow-search">Search queue</label><input id="workflow-search" @bind="_search" placeholder="@_presentation.SearchPlaceholder" @onkeydown="HandleSearchKey" /></div>
+            <label class="sr-only" for="workflow-branch">Branch</label>
+            <select id="workflow-branch" @bind="_branch"><option value="">All branches</option><option value="HO">HO · Head Office</option><option value="001">001 · Yangon</option><option value="002">002 · Mandalay</option></select>
+            <button class="secondary-button" @onclick="LoadQueueAsync">Apply filters</button>
+            <span class="result-count">@_queue.TotalCount result(s)</span>
+        </div>
+        <ChequeTable Items="@_queue.Items" SelectedId="@_selectedId" OnSelect="SelectAsync" />
+    </section>
+
+    @if (_detail is not null)
+    {
+        <section class="detail-workspace" id="workflow-decision">
+            <div class="panel image-panel">
+                <div class="panel-heading"><div><span class="eyebrow">IMAGE WORKSPACE</span><h2>@_detail.Cheque.ChequeId · Cheque @_detail.Cheque.ChequeNo</h2></div><StatusPill Status="@_detail.Cheque.Status" /></div>
+                <div class="cheque-image"><img src="@CurrentImage" alt="Cheque @_imageView image for @_detail.Cheque.ChequeNo" /></div>
+                <div class="image-tabs" role="tablist" aria-label="Cheque image views">
+                    <button role="tab" aria-selected="@(_imageView == "front")" class="@(_imageView == "front" ? "active" : null)" @onclick="ShowFront">Front</button>
+                    <button role="tab" aria-selected="@(_imageView == "back")" class="@(_imageView == "back" ? "active" : null)" @onclick="ShowBack">Rear</button>
+                    <button role="tab" aria-selected="@(_imageView == "signature")" class="@(_imageView == "signature" ? "active" : null)" @onclick="ShowSignature">Signature</button>
+                    <span>Image quality · Good</span>
+                </div>
+                @if (_detail.Timeline.Count > 0)
+                {
+                    <div class="audit-inline"><span class="eyebrow">RECENT AUDIT</span>@foreach (var audit in _detail.Timeline.Take(3)) { <div><i></i><span><strong>@Pretty(audit.Action)</strong><small>@audit.Note</small></span><time>@audit.OccurredAtUtc.ToLocalTime().ToString("dd MMM, HH:mm")</time></div> }</div>
+                }
+            </div>
+
+            <aside class="panel detail-panel">
+                <div class="panel-heading"><div><span class="eyebrow">@DetailEyebrow</span><h2>@_presentation.DetailTitle</h2></div></div>
+
+                @if (IsEditable)
+                {
+                    <div class="editable-grid">
+                        <div class="form-field"><label for="draft-batch">Batch number</label><input id="draft-batch" @bind="_draftBatch" /></div>
+                        <div class="form-field"><label for="draft-cheque">Cheque number</label><input id="draft-cheque" @bind="_draftCheque" /></div>
+                        <div class="form-field"><label for="draft-account">Account number</label><input id="draft-account" @bind="_draftAccount" /></div>
+                        <div class="form-field"><label for="draft-amount">Amount</label><input id="draft-amount" inputmode="decimal" @bind="_draftAmount" /></div>
+                    </div>
+                }
+                else
+                {
+                    <dl class="detail-list"><div><dt>Drawer</dt><dd>@_detail.DrawerName</dd></div><div><dt>Payee</dt><dd>@_detail.PayeeName</dd></div><div><dt>Account</dt><dd>@Mask(_detail.AccountNo)</dd></div><div><dt>Branch</dt><dd>@_detail.BranchName</dd></div><div><dt>Amount</dt><dd class="large">@_detail.Cheque.Currency @_detail.Cheque.Amount.ToString("N2")</dd></div><div><dt>Value date</dt><dd>@_detail.Cheque.ValueDateUtc.ToLocalTime().ToString("dd MMM yyyy")</dd></div></dl>
+                }
+
+                @if (_presentation.Surface == WorkflowSurface.Verification)
+                {
+                    <div class="verification-card"><img src="@_detail.SignatureImageUrl" alt="Stored signature for account ending @LastFour(_detail.AccountNo)" /><div><strong>CBS signature match</strong><span>Visual comparison required before selecting a decision.</span></div></div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(_detail.Cheque.RejectReason))
+                {
+                    <div class="reason-box"><strong>Read-only exception</strong><span>@_detail.Cheque.RejectReason</span></div>
+                }
+
+                @if (RequiresReturnReason)
+                {
+                    <div class="form-field"><label for="return-reason">Return reason</label><select id="return-reason" @bind="_returnReason"><option value="">Select a clearing return reason</option><option>R01 · Insufficient funds</option><option>R02 · Account closed</option><option>R03 · Signature differs</option><option>R04 · Stale or post-dated cheque</option><option>R05 · Payment stopped</option></select></div>
+                }
+
+                <div class="form-field"><label for="action-note">Decision note</label><textarea id="action-note" @bind="_note" rows="3" placeholder="Add an audit note (optional)"></textarea></div>
+                <div class="action-toolbar">
+                    @foreach (var action in _queue.AllowedActions)
+                    {
+                        <button class="@(IsDanger(action) ? "danger-button" : "primary-button")" disabled="@_processing" @onclick="() => RequestAction(action)">@ActionLabel(action)</button>
+                    }
+                </div>
+            </aside>
+        </section>
+    }
+}
+
+@if (_pendingAction is not null)
+{
+    <div class="dialog-backdrop" @onclick="CancelAction">
+        <section class="confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="confirm-title" @onclick:stopPropagation>
+            <span class="dialog-icon" aria-hidden="true">@_presentation.Icon</span>
+            <h2 id="confirm-title">Confirm @ActionLabel(_pendingAction)</h2>
+            <p>This decision will be recorded in the audit trail and route <strong>@_selectedId</strong> to the next clearing workstep.</p>
+            <div class="dialog-actions"><button class="secondary-button" @onclick="CancelAction">Cancel</button><button class="@(IsDanger(_pendingAction) ? "danger-button" : "primary-button")" @onclick="ConfirmActionAsync">Confirm action</button></div>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Workstep { get; set; } = "SCANNING_DATA_ENTRY";
+
+    private WorkflowPresentation _presentation = WorkflowPresentations.Get("SCANNING_DATA_ENTRY");
+    private string? _loadedWorkstep;
+    private string _search = string.Empty;
+    private string _branch = string.Empty;
+    private string _note = string.Empty;
+    private string _returnReason = string.Empty;
+    private string _imageView = "front";
+    private string _draftBatch = string.Empty;
+    private string _draftCheque = string.Empty;
+    private string _draftAccount = string.Empty;
+    private string _draftAmount = string.Empty;
+    private string? _selectedFile;
+    private string? _selectedId;
+    private string? _error;
+    private string? _notice;
+    private string? _pendingAction;
+    private string? _generatedFileName;
+    private DateTime? _lastRun;
+    private DateTime _lastRefreshed = DateTime.Now;
+    private bool _processing;
+    private bool _loading;
+    private QueueResponseModel? _queue;
+    private ChequeDetailResponseModel? _detail;
+
+    private string SectionTitle => _presentation.Direction == "OUTWARD" ? "Outward Clearing" : "Inward Clearing";
+    private string DetailEyebrow => _presentation.Surface switch { WorkflowSurface.Repair => "CORRECTION DATA", WorkflowSurface.Response => "RESPONSE CONTROL", WorkflowSurface.Return => "RETURN CONTROL", WorkflowSurface.Verification => "VERIFICATION DATA", _ => "INSTRUMENT DETAILS" };
+    private decimal VisibleAmount => _queue?.Items.Sum(item => item.Amount) ?? 0m;
+    private int ExceptionCount => _queue?.Items.Count(item => item.Status.Equals("EXCEPTION", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(item.RejectReason)) ?? 0;
+    private bool IsEditable => _presentation.Surface is WorkflowSurface.Capture or WorkflowSurface.Repair;
+    private bool RequiresReturnReason => _presentation.Surface == WorkflowSurface.Return || Workstep is "TECHNICAL_VERIFICATION" or "REFERRAL";
+    private string? PrimaryAction => _queue?.AllowedActions.FirstOrDefault();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.Equals(_loadedWorkstep, Workstep, StringComparison.OrdinalIgnoreCase)) return;
+        _loadedWorkstep = Workstep;
+        _presentation = WorkflowPresentations.Get(Workstep);
+        ResetWorkspace();
+        await LoadQueueAsync();
+    }
+
+    private async Task LoadQueueAsync()
+    {
+        _loading = true;
+        _error = null;
+        var result = await Client.QueueAsync(new(Workstep, 1, 20, _search, _branch));
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _queue = null;
+            _detail = null;
+            _error = result.Message;
+            _loading = false;
+            return;
+        }
+
+        _queue = result.Data;
+        _lastRefreshed = DateTime.Now;
+        if (_queue.Items.Count == 0)
+        {
+            _selectedId = null;
+            _detail = null;
+        }
+        else if (_selectedId is null || !_queue.Items.Any(item => item.ChequeId == _selectedId))
+        {
+            await SelectAsync(_queue.Items[0].ChequeId);
+        }
+        _loading = false;
+    }
+
+    private async Task SelectAsync(string id)
+    {
+        _selectedId = id;
+        _imageView = "front";
+        var result = await Client.DetailAsync(new(id));
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _detail = null;
+            _error = result.Message;
+            return;
+        }
+
+        _detail = result.Data;
+        _draftBatch = _detail.Cheque.BatchNo;
+        _draftCheque = _detail.Cheque.ChequeNo;
+        _draftAccount = _detail.Cheque.AccountNo;
+        _draftAmount = _detail.Cheque.Amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private void RequestPrimaryAction()
+    {
+        if (PrimaryAction is { } action) RequestAction(action);
+    }
+
+    private void RequestAction(string action)
+    {
+        _error = null;
+        if (_selectedId is null)
+        {
+            _error = "Select a workitem before choosing an action.";
+            return;
+        }
+        if (NeedsReason(action) && string.IsNullOrWhiteSpace(_returnReason))
+        {
+            _error = "Select a return reason before confirming this decision.";
+            return;
+        }
+        _pendingAction = action;
+    }
+
+    private async Task ConfirmActionAsync()
+    {
+        if (_pendingAction is not { } action) return;
+        _pendingAction = null;
+        await ProcessAsync(action);
+    }
+
+    private async Task ProcessAsync(string action)
+    {
+        if (_selectedId is null) return;
+        _processing = true;
+        _error = null;
+        _notice = null;
+        var note = string.Join(" · ", new[] { _returnReason, _note }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        var result = await Client.ActionAsync(new(_selectedId, action, string.IsNullOrWhiteSpace(note) ? null : note));
+        if (result.IsSuccess)
+        {
+            _notice = $"{ActionLabel(action)} completed for {_selectedId}.";
+            _lastRun = result.Data?.ProcessedAtUtc.ToLocalTime() ?? DateTime.Now;
+            if (CreatesOutput(action)) _generatedFileName = BuildOutputName();
+            _note = string.Empty;
+            _returnReason = string.Empty;
+            await LoadQueueAsync();
+        }
+        else
+        {
+            _error = result.Message;
+        }
+        _processing = false;
+    }
+
+    private Task HandleFileSelected(InputFileChangeEventArgs args)
+    {
+        _selectedFile = args.File.Name;
+        _notice = $"{_selectedFile} selected. Choose Import ICL to validate and route its instruments.";
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleSearchKey(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter") await LoadQueueAsync();
+    }
+
+    private void SimulateCapture() => _notice = "Scanner handshake completed. The capture station is ready for the selected batch.";
+    private void ScrollToDecision() => _notice = _selectedId is null ? "Select a workitem to open its decision workspace." : $"Decision workspace opened for {_selectedId}.";
+    private void CancelAction() => _pendingAction = null;
+    private void ShowFront() => _imageView = "front";
+    private void ShowBack() => _imageView = "back";
+    private void ShowSignature() => _imageView = "signature";
+
+    private string CurrentImage => _detail is null ? string.Empty : _imageView switch { "back" => _detail.BackImageUrl, "signature" => _detail.SignatureImageUrl, _ => _detail.FrontImageUrl };
+    private string BuildOutputName()
+    {
+        var extension = Workstep.Contains("ICL", StringComparison.OrdinalIgnoreCase) ? "icl" : "dat";
+        return $"{Workstep.ToLowerInvariant().Replace('_', '-')}-{DateTime.Now:yyyyMMdd-HHmmss}.{extension}";
+    }
+
+    private void ResetWorkspace()
+    {
+        _queue = null;
+        _detail = null;
+        _selectedId = null;
+        _selectedFile = null;
+        _notice = null;
+        _error = null;
+        _pendingAction = null;
+        _returnReason = string.Empty;
+        _note = string.Empty;
+    }
+
+    private static bool NeedsReason(string action) => action is "RETURN" or "SUBMIT_RETURN";
+    private static bool CreatesOutput(string action) => action is "GENERATE" or "POST" or "UPLOAD";
+    private static bool IsDanger(string action) => action.Contains("REJECT", StringComparison.OrdinalIgnoreCase) || action.Contains("NAK", StringComparison.OrdinalIgnoreCase) || action == "RETURN";
+    private static string ActionLabel(string action) => Pretty(action.Replace('_', ' '));
+    private static string Pretty(string value) => System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(value.ToLowerInvariant());
+    private static string Mask(string value) => value.Length <= 4 ? value : $"••••{value[^4..]}";
+    private static string LastFour(string value) => value.Length <= 4 ? value : value[^4..];
+}

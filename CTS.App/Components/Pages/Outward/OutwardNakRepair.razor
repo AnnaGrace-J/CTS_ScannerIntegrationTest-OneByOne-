@@ -1,0 +1,1689 @@
+@page "/outward/nak-repair"
+@attribute [Authorize]
+@inject WorkspaceApiService Client
+@inject NavigationManager Navigation
+
+@*
+// Original Code
+// @page "/outward/nak-repair"
+// @attribute [Authorize]
+// <WorkflowWorkspace Workstep="OUTWARD_NAK_REPAIR" />
+*@
+
+@* // Code Added by KK *@
+<PageTitle>Outward NAK Repair · ACE CTS</PageTitle>
+
+<div class="demo-ops-root">
+    @* Top Workspace Header *@
+    <div class="demo-top-bar">
+        <div class="demo-breadcrumbs">
+            <span class="demo-bc-bold">ACE CTS Workspace</span>
+            <span class="demo-meta-text">
+                <span class="demo-icon">📅</span> Business date 2026-06-23
+                <span class="demo-icon ml-2">🏛</span> Head Office
+                <span class="demo-icon ml-2">Role:</span> ADMIN
+            </span>
+        </div>
+        <div class="demo-top-badges">
+            <span class="demo-audit-badge">Audit events: <strong>57</strong></span>
+            <span class="demo-user-badge">admin1</span>
+        </div>
+    </div>
+
+    @* Header Card with Working Hide/Show Info Toggle *@
+    <div class="demo-card demo-header-card">
+        @if (_infoCollapsed)
+        {
+            <div class="demo-header-collapsed-row">
+                <div class="demo-collapsed-left">
+                    <h1 class="demo-collapsed-title">Outward NAK Repair</h1>
+                    <span class="demo-chip chip-online">Online</span>
+                    <span class="demo-chip chip-cyan">BRANCH <strong>Head Office</strong></span>
+                    <span class="demo-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+                    <span class="demo-chip chip-blue">DATE <strong>@DateTime.Today.ToString("yyyy-MM-dd")</strong></span>
+                </div>
+                <button class="demo-ghost-btn" @onclick="() => _infoCollapsed = false">
+                    <span class="demo-icon">👁</span> Show Info
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="demo-header-full">
+                <div class="demo-header-full-top">
+                    <div>
+                        <div class="demo-sub-breadcrumbs">
+                            <span>ACE CTS Workspace</span>
+                            <span class="demo-bc-sep">/</span>
+                            <span>Outward</span>
+                            <span class="demo-bc-sep">/</span>
+                            <span class="demo-bc-current">Service Operations</span>
+                        </div>
+                        <h1 class="demo-main-title">Outward NAK Repair</h1>
+                        <p class="demo-header-subtitle">Service Operations workspace for outward clearing automation and manual response handling.</p>
+                    </div>
+                    <button class="demo-ghost-btn" @onclick="() => _infoCollapsed = true">
+                        <span class="demo-icon">👁</span> Hide Info
+                    </button>
+                </div>
+
+                <div class="demo-header-chips-row">
+                    <span class="demo-chip chip-cyan">BRANCH <strong>Head Office</strong></span>
+                    <span class="demo-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+                    <span class="demo-chip chip-blue">BUSINESS DATE <strong>@DateTime.Today.ToString("yyyy-MM-dd")</strong></span>
+                    <span class="demo-chip chip-gray">LAST UPDATED <strong>@DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt")</strong></span>
+                    <span class="demo-chip chip-online">STATUS <strong>Online</strong></span>
+                    <span class="demo-chip chip-gray">LAST RUN TIME <strong>@_lastRunTime</strong></span>
+                    <span class="demo-chip chip-gray">POLL INTERVAL <strong>10s</strong></span>
+                </div>
+            </div>
+        }
+    </div>
+
+    @* Service Operations Control Strip *@
+    <div class="demo-card demo-service-strip">
+        <div class="demo-service-left">
+            <div class="demo-clock-icon">🕒</div>
+            <div>
+                <strong class="demo-service-title">Service Operations Control</strong>
+                <span class="demo-service-subtitle">Last run: @_lastRunTime</span>
+            </div>
+        </div>
+        <div class="demo-service-right">
+            <button class="demo-action-btn btn-navy" disabled="@_runningTick" @onclick="RunTick">
+                <span>▶</span>
+                <span>@(_runningTick ? "Running..." : "Run Service Tick")</span>
+            </button>
+            <label class="demo-service-toggle">
+                <input type="checkbox" @bind="_autoRun" />
+                <span>Auto-run @(_autoRun ? "On" : "Off")</span>
+            </label>
+            <span class="demo-pill pill-poll">Poll 10s</span>
+            <span class="demo-pill pill-result">Last result: @_serviceResult</span>
+            <span class="demo-pill pill-error">Last error: None</span>
+        </div>
+    </div>
+
+    @* NAK Reason Exception Alert Banner *@
+    @if (SelectedCheque != null)
+    {
+        <div class="demo-alert demo-alert-warning">
+            <span class="demo-alert-icon">⚠️</span>
+            <span>
+                <strong>NAK reason:</strong> @(SelectedCheque.NakReason ?? "Invalid MICR");
+                <strong>remarks:</strong> @(SelectedCheque.NakRemarks ?? "No remarks supplied")
+            </span>
+        </div>
+    }
+
+    @* Feedback Messages *@
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="demo-alert demo-alert-danger">
+            <span>@_message</span>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="demo-alert demo-alert-success">
+            <span>✓ @_successMessage</span>
+        </div>
+    }
+
+    @* NAK Repair Filters Panel with working Hide/Show Filters *@
+    <div class="demo-card demo-filter-panel">
+        <div class="demo-filter-header">
+            <div>
+                <h2 class="demo-filter-title">NAK Repair Filters</h2>
+                <span class="demo-filter-count">@FilteredRows.Count matching records</span>
+            </div>
+            <button class="demo-ghost-btn" @onclick="() => _filtersCollapsed = !_filtersCollapsed">
+                <span>@(_filtersCollapsed ? "▼ Show Filters" : "▲ Hide Filters")</span>
+            </button>
+        </div>
+        @if (!_filtersCollapsed)
+        {
+            <div class="demo-filter-grid">
+                <div class="demo-field">
+                    <label class="demo-label">CHEQUE NO.</label>
+                    <input type="text" class="demo-input" placeholder="e.g. 661004" @bind="_filterChequeNo" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">AMOUNT</label>
+                    <input type="text" class="demo-input" placeholder="e.g. 3325000" @bind="_filterAmount" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">MICR A/C NO.</label>
+                    <input type="text" class="demo-input" placeholder="Search MICR account..." @bind="_filterMicrAccount" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">ROUTING NO.</label>
+                    <input type="text" class="demo-input" placeholder="e.g. BADRT or 100002" @bind="_filterRouting" @bind:event="oninput" />
+                </div>
+                <div class="demo-field">
+                    <label class="demo-label">CREDIT A/C NO.</label>
+                    <input type="text" class="demo-input" placeholder="Search credit account..." @bind="_filterCreditAccount" @bind:event="oninput" />
+                </div>
+            </div>
+        }
+    </div>
+
+    @* 2-Column Split: Cheque Image Review + Queue on Left, Correction Workspace on Right *@
+    <div class="demo-nak-grid">
+        @* Left Column: Image Viewer & Queue *@
+        <div class="demo-nak-left">
+            @* Cheque Image Review Card *@
+            <div class="demo-card demo-viewer-card">
+                <div class="demo-viewer-header">
+                    <div>
+                        <h3 class="demo-panel-title">NAK Repair Image Review</h3>
+                        <span class="demo-panel-sub">Cheque @(SelectedCheque?.ChequeNo ?? "None")</span>
+                    </div>
+                    <div class="demo-viewer-tabs">
+                        <button class="demo-viewer-tab-btn @(_imageView == "front" ? "active" : "")" @onclick='() => _imageView = "front"'>Front</button>
+                        <button class="demo-viewer-tab-btn @(_imageView == "rear" ? "active" : "")" @onclick='() => _imageView = "rear"'>Rear</button>
+                    </div>
+                </div>
+
+                <div class="demo-viewer-badge-bar">
+                    <span class="demo-tag tag-repair">NAK Repair</span>
+                </div>
+
+                <div class="demo-cheque-image-frame">
+                    @if (SelectedCheque != null)
+                    {
+                        <img src="@CurrentChequeImageUrl" alt="Cheque Image" class="demo-cheque-img" />
+                    }
+                    else
+                    {
+                        <div class="demo-empty-cell">No cheque selected.</div>
+                    }
+                </div>
+            </div>
+
+            @* NAK Repair Queue Table *@
+            <div class="demo-card demo-table-panel">
+                <div class="demo-table-panel-header">
+                    <h3 class="demo-panel-title">NAK Repair Queue</h3>
+                    <span class="demo-panel-sub">@FilteredRows.Count record(s)</span>
+                </div>
+                <div class="demo-table-wrapper">
+                    <table class="demo-data-table">
+                        <thead>
+                            <tr>
+                                <th>CHEQUE NO</th>
+                                <th>AMOUNT</th>
+                                <th>NAK REASON</th>
+                                <th>STATUS</th>
+                                <th style="width: 36px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (FilteredRows.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="5" class="demo-empty-cell">No NAK repair items match the filters.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in FilteredRows)
+                                {
+                                    var isSelected = SelectedCheque?.Id == row.Id;
+                                    <tr class="demo-clickable-row @(isSelected ? "row-selected" : "")" @onclick="() => SelectCheque(row)">
+                                        <td class="font-bold">@row.ChequeNo</td>
+                                        <td>@row.Amount.ToString("N0")</td>
+                                        <td>@(row.NakReason ?? "Rejected by clearing house")</td>
+                                        <td>
+                                            <span class="demo-tag tag-repair-req">@row.Status</span>
+                                        </td>
+                                        <td class="text-right">
+                                            <span class="demo-chevron-indicator">›</span>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        @* Right Column: Correction Workspace Form *@
+        <div class="demo-nak-right">
+            <div class="demo-card demo-correction-panel">
+                <div class="demo-correction-header">
+                    <h3 class="demo-panel-title">Correction Workspace</h3>
+                </div>
+
+                <div class="demo-correction-body">
+                    @* Account Details Readonly Group *@
+                    <div class="demo-field-group">
+                        <div class="demo-field-group-title">ACCOUNT DETAILS</div>
+                        <div class="demo-field-row">
+                            <span class="field-label">Account No.</span>
+                            <span class="field-value font-mono">@(SelectedCheque?.AccountNo ?? "-")</span>
+                        </div>
+                        <div class="demo-field-row">
+                            <span class="field-label">Status</span>
+                            <span class="field-value">@(SelectedCheque?.AccountStatus ?? "Closed")</span>
+                        </div>
+                        <div class="demo-field-row">
+                            <span class="field-label">Account Name</span>
+                            <span class="field-value font-bold">@(SelectedCheque?.AccountName ?? "-")</span>
+                        </div>
+                        <div class="demo-field-row">
+                            <span class="field-label">Branch</span>
+                            <span class="field-value">@(SelectedCheque?.Branch ?? "Branch 002")</span>
+                        </div>
+                    </div>
+
+                    @* Editable Cheque & MICR Details *@
+                    <div class="demo-correction-fields">
+                        <div class="demo-field">
+                            <label class="demo-label">CHEQUE NO.</label>
+                            <input type="text" class="demo-input" @bind="_draftChequeNo" />
+                        </div>
+
+                        <div class="demo-field">
+                            <label class="demo-label">MICR ACCOUNT NO.</label>
+                            <input type="text" class="demo-input" @bind="_draftMicrAccount" />
+                        </div>
+
+                        <div class="demo-field">
+                            <label class="demo-label">ROUTING NUMBER</label>
+                            <input type="text" class="demo-input" @bind="_draftRouting" />
+                        </div>
+
+                        <div class="demo-field">
+                            <label class="demo-label">CHEQUE TYPE</label>
+                            <input type="text" class="demo-input" @bind="_draftChequeType" />
+                        </div>
+
+                        <div class="demo-field">
+                            <label class="demo-label">CHECK DIGIT</label>
+                            <input type="text" class="demo-input" @bind="_draftCheckDigit" />
+                        </div>
+
+                        <div class="demo-field">
+                            <label class="demo-label">REMARKS</label>
+                            <input type="text" class="demo-input" placeholder="Enter correction remarks..." @bind="_draftRemarks" />
+                        </div>
+
+                        <div class="demo-field">
+                            <label class="demo-label">NAK REASON</label>
+                            <input type="text" class="demo-input demo-input-disabled" disabled value="@(SelectedCheque?.NakReason ?? "")" />
+                        </div>
+
+                        <div class="demo-field">
+                            <label class="demo-label">NAK REMARKS</label>
+                            <input type="text" class="demo-input demo-input-disabled" disabled value="@(SelectedCheque?.NakRemarks ?? "")" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Sticky Action Bar matching Demo Screenshot *@
+    <div class="demo-card demo-sticky-actions">
+        <button class="demo-action-btn btn-navy" disabled="@(SelectedCheque == null)" @onclick="AcceptCheque">
+            <span>✓</span>
+            <span>Accept</span>
+        </button>
+        <button class="demo-action-btn btn-secondary" disabled="@(SelectedCheque == null)" @onclick="DiscardCheque">
+            <span>🗑</span>
+            <span>Discard</span>
+        </button>
+        <button class="demo-action-btn btn-secondary" @onclick='() => Navigation.NavigateTo("/outward/dashboard")'>
+            <span>✕</span>
+            <span>Exit</span>
+        </button>
+    </div>
+
+    @* Collapsible Audit Timeline matching Screenshot *@
+    <div class="demo-card demo-pane">
+        <div class="demo-pane-header">
+            <div>
+                <strong class="demo-panel-title">Audit Timeline</strong>
+                <span class="demo-panel-sub ml-2">@_auditEvents.Count audit event(s)</span>
+            </div>
+            <button class="demo-link-btn" @onclick="() => _auditOpen = !_auditOpen">
+                <span>@(_auditOpen ? "▲ Close Audit" : "▼ Open Audit")</span>
+            </button>
+        </div>
+        @if (_auditOpen)
+        {
+            <div class="demo-audit-events-list">
+                @foreach (var ev in _auditEvents)
+                {
+                    <div class="demo-audit-item">
+                        <span class="demo-audit-time">@ev.Timestamp - @ev.User</span>
+                        <strong class="demo-audit-act">@ev.Action</strong>
+                        <p class="demo-audit-desc">@ev.Description</p>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@*
+// Original Code
+// ( Original Code, before fixing )
+<style>
+    .demo-ops-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #172033;
+        background: #F5F7FA;
+        min-height: calc(100vh - 80px);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    /* Cards */
+    .demo-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 16px 20px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    /* Top bar */
+    .demo-top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 2px;
+    }
+    .demo-breadcrumbs {
+        display: flex;
+        align-items: center;
+        font-size: 13px;
+        color: #475569;
+    }
+    .demo-bc-bold { font-weight: 700; color: #0F2A44; margin-right: 8px; }
+    .demo-meta-text { font-size: 12px; color: #64748B; display: inline-flex; align-items: center; }
+    .demo-top-badges { display: flex; align-items: center; gap: 8px; }
+    .demo-audit-badge {
+        font-size: 11px;
+        background: #FFFFFF;
+        border: 1px solid #CBD5E1;
+        padding: 3px 10px;
+        border-radius: 4px;
+        color: #334155;
+    }
+    .demo-user-badge {
+        font-size: 12px;
+        font-weight: 700;
+        background: #FFFFFF;
+        border: 1px solid #CBD5E1;
+        padding: 3px 10px;
+        border-radius: 4px;
+        color: #0F2A44;
+    }
+
+    /* Header card */
+    .demo-header-card { padding: 14px 20px; }
+    .demo-header-full-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+    .demo-sub-breadcrumbs {
+        font-size: 11px;
+        color: #64748B;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .demo-bc-sep { color: #94A3B8; }
+    .demo-bc-current { font-weight: 700; color: #0F2A44; }
+    .demo-main-title {
+        font-size: 18px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin: 0 0 4px 0;
+    }
+    .demo-header-subtitle {
+        font-size: 12px;
+        color: #64748B;
+        margin: 0;
+    }
+    .demo-header-chips-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    /* Collapsed Header */
+    .demo-header-collapsed-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    .demo-collapsed-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .demo-collapsed-title {
+        font-size: 16px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin: 0;
+    }
+
+    /* Chips */
+    .demo-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        padding: 3px 10px;
+        border-radius: 4px;
+        border: 1px solid transparent;
+    }
+    .chip-online { background: #FFFFFF; border-color: #38BDF8; color: #0284C7; font-weight: 700; }
+    .chip-cyan { background: #ECFEFF; border-color: #A5F3FC; color: #0891B2; }
+    .chip-blue { background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8; }
+    .chip-gray { background: #F8FAFC; border-color: #E2E8F0; color: #475569; }
+
+    /* Ghost Button */
+    .demo-ghost-btn {
+        background: #FFFFFF;
+        border: 1px solid #CBD5E1;
+        border-radius: 5px;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #334155;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s;
+    }
+    .demo-ghost-btn:hover { background: #F1F5F9; border-color: #94A3B8; }
+
+    /* Service strip */
+    .demo-service-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 20px;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+    .demo-service-left { display: flex; align-items: center; gap: 10px; }
+    .demo-clock-icon {
+        width: 32px;
+        height: 32px;
+        background: #EFF6FF;
+        border: 1px solid #BFDBFE;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+    }
+    .demo-service-title { font-size: 13px; font-weight: 700; color: #0F2A44; display: block; }
+    .demo-service-subtitle { font-size: 11px; color: #64748B; display: block; }
+    .demo-service-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .demo-service-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid #CBD5E1;
+        background: #FFFFFF;
+        border-radius: 6px;
+        padding: 0 10px;
+        height: 36px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #0F2A44;
+        cursor: pointer;
+    }
+
+    .demo-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 36px;
+        padding: 0 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .pill-poll { background: #F8FAFC; border: 1px solid #E2E8F0; color: #0F2A44; }
+    .pill-result { background: #ECFDF5; border: 1px solid #A7F3D0; color: #047857; }
+    .pill-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; }
+
+    /* Alert / Exception Banner */
+    .demo-alert {
+        padding: 10px 16px;
+        border-radius: 6px;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .demo-alert-warning {
+        background: #FFFBEB;
+        border: 1px solid #FDE68A;
+        color: #B45309;
+    }
+    .demo-alert-danger {
+        background: #FEF2F2;
+        border: 1px solid #FECACA;
+        color: #DC2626;
+    }
+    .demo-alert-success {
+        background: #ECFDF5;
+        border: 1px solid #A7F3D0;
+        color: #059669;
+    }
+
+    /* Filter panel */
+    .demo-filter-panel { padding: 14px 20px; }
+    .demo-filter-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }
+    .demo-filter-title { font-size: 14px; font-weight: 800; color: #0F2A44; margin: 0; }
+    .demo-filter-count { font-size: 11px; color: #64748B; margin-left: 8px; }
+    .demo-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+        padding-top: 8px;
+        border-top: 1px solid #F1F5F9;
+    }
+    .demo-field { display: flex; flex-direction: column; gap: 4px; }
+    .demo-label {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #475569;
+    }
+    .demo-input {
+        border: 1px solid #CBD5E1;
+        border-radius: 6px;
+        padding: 7px 10px;
+        font-size: 12px;
+        color: #0F2A44;
+        background: #FFFFFF;
+        outline: none;
+        transition: border 0.15s;
+    }
+    .demo-input:focus { border-color: #2563EB; }
+    .demo-input-disabled { background: #F1F5F9; color: #64748B; cursor: not-allowed; }
+
+    /* 2-Column Grid Layout */
+    .demo-nak-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 16px;
+        align-items: start;
+    }
+    .demo-nak-left {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+    .demo-nak-right {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Viewer Card */
+    .demo-viewer-card { padding: 16px; }
+    .demo-viewer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    .demo-viewer-tabs { display: flex; gap: 4px; }
+    .demo-viewer-tab-btn {
+        border: 1px solid #CBD5E1;
+        background: #FFFFFF;
+        border-radius: 4px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #475569;
+        cursor: pointer;
+    }
+    .demo-viewer-tab-btn.active {
+        background: #0F2A44;
+        border-color: #0F2A44;
+        color: #FFFFFF;
+    }
+    .demo-viewer-badge-bar { margin-bottom: 12px; }
+    .demo-cheque-image-frame {
+        border: 1px dashed #CBD5E1;
+        background: #F8FAFC;
+        border-radius: 8px;
+        padding: 16px;
+        min-height: 230px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .demo-cheque-img {
+        max-height: 220px;
+        max-width: 100%;
+        border-radius: 4px;
+        border: 1px solid #CBD5E1;
+        background: #FFFFFF;
+        object-fit: contain;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    /* Queue Table */
+    .demo-table-panel { padding: 0; overflow: hidden; }
+    .demo-table-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 18px;
+        border-bottom: 1px solid #EEF2F6;
+    }
+    .demo-panel-title { font-size: 13px; font-weight: 800; color: #0F2A44; margin: 0; }
+    .demo-panel-sub { font-size: 11px; color: #64748B; }
+
+    .demo-table-wrapper { width: 100%; overflow-x: auto; }
+    .demo-data-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+    .demo-data-table th {
+        background: #F8FAFC;
+        color: #475569;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 10px 14px;
+        border-bottom: 1px solid #E2E8F0;
+        white-space: nowrap;
+    }
+    .demo-data-table td {
+        padding: 11px 14px;
+        border-bottom: 1px solid #EEF2F6;
+        color: #172033;
+        white-space: nowrap;
+    }
+    .demo-clickable-row { cursor: pointer; transition: background 0.12s; }
+    .demo-clickable-row:hover { background: #F0F7FF; }
+    .demo-clickable-row.row-selected { background: #EFF6FF; }
+    .demo-empty-cell { text-align: center; color: #94A3B8; padding: 24px 16px; }
+    .demo-chevron-indicator { font-weight: bold; color: #94A3B8; }
+
+    /* Correction Panel */
+    .demo-correction-panel { padding: 16px 18px; }
+    .demo-correction-header { margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #EEF2F6; }
+    .demo-correction-body { display: flex; flex-direction: column; gap: 12px; }
+
+    .demo-field-group {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 6px;
+        padding: 10px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .demo-field-group-title {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #64748B;
+        margin-bottom: 4px;
+    }
+    .demo-field-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+    }
+    .field-label { color: #64748B; font-weight: 500; }
+    .field-value { color: #0F2A44; }
+
+    .demo-correction-fields {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    /* Tags */
+    .demo-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+    .tag-repair { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
+    .tag-repair-req { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
+
+    /* Sticky Action Bar */
+    .demo-sticky-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 20px;
+    }
+    .demo-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 38px;
+        padding: 0 16px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .btn-navy {
+        background: #0F2A44;
+        color: #FFFFFF;
+        border: 1px solid #0F2A44;
+    }
+    .btn-navy:hover:not(:disabled) { background: #1B3C61; }
+    .btn-secondary {
+        background: #FFFFFF;
+        color: #0F2A44;
+        border: 1px solid #CBD5E1;
+    }
+    .btn-secondary:hover:not(:disabled) { background: #F1F5F9; }
+    .demo-action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Audit Pane */
+    .demo-pane { padding: 14px 20px; }
+    .demo-pane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    .demo-link-btn {
+        background: none;
+        border: none;
+        color: #2563EB;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .demo-audit-events-list { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
+    .demo-audit-item { border-left: 2px solid #2563EB; padding-left: 10px; }
+    .demo-audit-time { font-size: 10px; color: #94A3B8; display: block; }
+    .demo-audit-act { font-size: 12px; color: #0F2A44; display: block; margin: 1px 0; }
+    .demo-audit-desc { font-size: 11px; color: #64748B; margin: 0; }
+
+    .font-mono { font-family: monospace; }
+    .font-bold { font-weight: 700; }
+    .ml-2 { margin-left: 8px; }
+    .text-right { text-align: right; }
+</style>
+*@
+
+@* // Code Added by KK *@
+<style>
+    .demo-ops-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #172033;
+        background: #F5F7FA;
+        min-height: calc(100vh - 80px);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    /* Cards */
+    .demo-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 16px 20px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    /* Top bar */
+    .demo-top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 2px;
+    }
+    .demo-breadcrumbs {
+        display: flex;
+        align-items: center;
+        font-size: 13px;
+        color: #475569;
+    }
+    .demo-bc-bold { font-weight: 700; color: #0F2A44; margin-right: 8px; }
+    .demo-meta-text { font-size: 12px; color: #64748B; display: inline-flex; align-items: center; }
+    .demo-top-badges { display: flex; align-items: center; gap: 8px; }
+    .demo-audit-badge {
+        font-size: 11px;
+        background: #FFFFFF;
+        border: 1px solid #CBD5E1;
+        padding: 3px 10px;
+        border-radius: 4px;
+        color: #334155;
+    }
+    .demo-user-badge {
+        font-size: 12px;
+        font-weight: 700;
+        background: #FFFFFF;
+        border: 1px solid #CBD5E1;
+        padding: 3px 10px;
+        border-radius: 4px;
+        color: #0F2A44;
+    }
+
+    /* Header card */
+    .demo-header-card { padding: 14px 20px; }
+    .demo-header-full-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+    .demo-sub-breadcrumbs {
+        font-size: 11px;
+        color: #64748B;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .demo-bc-sep { color: #94A3B8; }
+    .demo-bc-current { font-weight: 700; color: #0F2A44; }
+    .demo-main-title {
+        font-size: 18px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin: 0 0 4px 0;
+    }
+    .demo-header-subtitle {
+        font-size: 12px;
+        color: #64748B;
+        margin: 0;
+    }
+    .demo-header-chips-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    /* Collapsed Header */
+    .demo-header-collapsed-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    .demo-collapsed-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .demo-collapsed-title {
+        font-size: 16px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin: 0;
+    }
+
+    /* Chips */
+    .demo-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        padding: 3px 10px;
+        border-radius: 4px;
+        border: 1px solid transparent;
+    }
+    .chip-online { background: #FFFFFF; border-color: #38BDF8; color: #0284C7; font-weight: 700; }
+    .chip-cyan { background: #ECFEFF; border-color: #A5F3FC; color: #0891B2; }
+    .chip-blue { background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8; }
+    .chip-gray { background: #F8FAFC; border-color: #E2E8F0; color: #475569; }
+
+    /* Ghost Button */
+    .demo-ghost-btn {
+        background: #FFFFFF;
+        border: 1px solid #CBD5E1;
+        border-radius: 5px;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #334155;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s;
+    }
+    .demo-ghost-btn:hover { background: #F1F5F9; border-color: #94A3B8; }
+
+    /* Service strip */
+    .demo-service-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 20px;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+    .demo-service-left { display: flex; align-items: center; gap: 10px; }
+    .demo-clock-icon {
+        width: 32px;
+        height: 32px;
+        background: #EFF6FF;
+        border: 1px solid #BFDBFE;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+    }
+    .demo-service-title { font-size: 13px; font-weight: 700; color: #0F2A44; display: block; }
+    .demo-service-subtitle { font-size: 11px; color: #64748B; display: block; }
+    .demo-service-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .demo-service-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid #CBD5E1;
+        background: #FFFFFF;
+        border-radius: 6px;
+        padding: 0 10px;
+        height: 36px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #0F2A44;
+        cursor: pointer;
+    }
+
+    .demo-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 36px;
+        padding: 0 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .pill-poll { background: #F8FAFC; border: 1px solid #E2E8F0; color: #0F2A44; }
+    .pill-result { background: #ECFDF5; border: 1px solid #A7F3D0; color: #047857; }
+    .pill-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; }
+
+    /* Alert / Exception Banner */
+    .demo-alert {
+        padding: 10px 16px;
+        border-radius: 6px;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .demo-alert-warning {
+        background: #FFFBEB;
+        border: 1px solid #FDE68A;
+        color: #B45309;
+    }
+    .demo-alert-danger {
+        background: #FEF2F2;
+        border: 1px solid #FECACA;
+        color: #DC2626;
+    }
+    .demo-alert-success {
+        background: #ECFDF5;
+        border: 1px solid #A7F3D0;
+        color: #059669;
+    }
+
+    /* Filter panel */
+    .demo-filter-panel { padding: 14px 20px; }
+    .demo-filter-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }
+    .demo-filter-title { font-size: 14px; font-weight: 800; color: #0F2A44; margin: 0; }
+    .demo-filter-count { font-size: 11px; color: #64748B; margin-left: 8px; }
+    .demo-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+        padding-top: 8px;
+        border-top: 1px solid #F1F5F9;
+    }
+    .demo-field { display: flex; flex-direction: column; gap: 4px; }
+    .demo-label {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #475569;
+    }
+    .demo-input {
+        border: 1px solid #CBD5E1;
+        border-radius: 6px;
+        padding: 7px 10px;
+        font-size: 12px;
+        color: #0F2A44;
+        background: #FFFFFF;
+        outline: none;
+        transition: border 0.15s;
+    }
+    .demo-input:focus { border-color: #2563EB; }
+    .demo-input-disabled { background: #F1F5F9; color: #64748B; cursor: not-allowed; }
+
+    /* 2-Column Grid Layout */
+    .demo-nak-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 16px;
+        align-items: start;
+    }
+    .demo-nak-left {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+    .demo-nak-right {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Viewer Card */
+    .demo-viewer-card { padding: 16px; }
+    .demo-viewer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    .demo-viewer-tabs { display: flex; gap: 4px; }
+    .demo-viewer-tab-btn {
+        border: 1px solid #CBD5E1;
+        background: #FFFFFF;
+        border-radius: 4px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #475569;
+        cursor: pointer;
+    }
+    .demo-viewer-tab-btn.active {
+        background: #0F2A44;
+        border-color: #0F2A44;
+        color: #FFFFFF;
+    }
+    .demo-viewer-badge-bar { margin-bottom: 12px; }
+    .demo-cheque-image-frame {
+        border: 1px dashed #CBD5E1;
+        background: #F8FAFC;
+        border-radius: 8px;
+        padding: 16px;
+        min-height: 230px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .demo-cheque-img {
+        max-height: 220px;
+        max-width: 100%;
+        border-radius: 4px;
+        border: 1px solid #CBD5E1;
+        background: #FFFFFF;
+        object-fit: contain;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    /* Queue Table */
+    .demo-table-panel { padding: 0; overflow: hidden; }
+    .demo-table-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 18px;
+        border-bottom: 1px solid #EEF2F6;
+    }
+    .demo-panel-title { font-size: 13px; font-weight: 800; color: #0F2A44; margin: 0; }
+    .demo-panel-sub { font-size: 11px; color: #64748B; }
+
+    .demo-table-wrapper { width: 100%; overflow-x: auto; }
+    .demo-data-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+    .demo-data-table th {
+        background: #F8FAFC;
+        color: #475569;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 10px 14px;
+        border-bottom: 1px solid #E2E8F0;
+        white-space: nowrap;
+    }
+    .demo-data-table td {
+        padding: 11px 14px;
+        border-bottom: 1px solid #EEF2F6;
+        color: #172033;
+        white-space: nowrap;
+    }
+    .demo-clickable-row { cursor: pointer; transition: background 0.12s; }
+    .demo-clickable-row:hover { background: #F0F7FF; }
+    .demo-clickable-row.row-selected { background: #EFF6FF; }
+    .demo-empty-cell { text-align: center; color: #94A3B8; padding: 24px 16px; }
+    .demo-chevron-indicator { font-weight: bold; color: #94A3B8; }
+
+    /* Correction Panel */
+    .demo-correction-panel { padding: 16px 18px; }
+    .demo-correction-header { margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #EEF2F6; }
+    .demo-correction-body { display: flex; flex-direction: column; gap: 12px; }
+
+    .demo-field-group {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 6px;
+        padding: 10px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .demo-field-group-title {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #64748B;
+        margin-bottom: 4px;
+    }
+    .demo-field-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+    }
+    .field-label { color: #64748B; font-weight: 500; }
+    .field-value { color: #0F2A44; }
+
+    .demo-correction-fields {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    /* Tags */
+    .demo-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+    .tag-repair { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
+    .tag-repair-req { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
+
+    /* Sticky Action Bar */
+    .demo-sticky-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 20px;
+    }
+    .demo-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 38px;
+        padding: 0 16px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .btn-navy {
+        background: #0F2A44;
+        color: #FFFFFF;
+        border: 1px solid #0F2A44;
+    }
+    .btn-navy:hover:not(:disabled) { background: #1B3C61; }
+    .btn-secondary {
+        background: #FFFFFF;
+        color: #0F2A44;
+        border: 1px solid #CBD5E1;
+    }
+    .btn-secondary:hover:not(:disabled) { background: #F1F5F9; }
+    .demo-action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Audit Pane */
+    .demo-pane { padding: 14px 20px; }
+    .demo-pane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    .demo-link-btn {
+        background: none;
+        border: none;
+        color: #2563EB;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .demo-audit-events-list { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
+    .demo-audit-item { border-left: 2px solid #2563EB; padding-left: 10px; }
+    .demo-audit-time { font-size: 10px; color: #94A3B8; display: block; }
+    .demo-audit-act { font-size: 12px; color: #0F2A44; display: block; margin: 1px 0; }
+    .demo-audit-desc { font-size: 11px; color: #64748B; margin: 0; }
+
+    .font-mono { font-family: monospace; }
+    .font-bold { font-weight: 700; }
+    .ml-2 { margin-left: 8px; }
+    .text-right { text-align: right; }
+
+    /* Dark Mode Overrides */
+    html[data-theme="dark"] .demo-ops-root {
+        background: var(--bg-canvas, #0b1329) !important;
+        color: var(--text, #f1f5f9) !important;
+    }
+    html[data-theme="dark"] .demo-bc-bold,
+    html[data-theme="dark"] .demo-bc-current,
+    html[data-theme="dark"] .demo-main-title,
+    html[data-theme="dark"] .demo-collapsed-title,
+    html[data-theme="dark"] .demo-service-title,
+    html[data-theme="dark"] .demo-filter-title,
+    html[data-theme="dark"] .demo-panel-title,
+    html[data-theme="dark"] .demo-audit-act,
+    html[data-theme="dark"] .field-value {
+        color: #f8fafc !important;
+    }
+    html[data-theme="dark"] .demo-breadcrumbs,
+    html[data-theme="dark"] .demo-sub-breadcrumbs,
+    html[data-theme="dark"] .demo-meta-text,
+    html[data-theme="dark"] .demo-header-subtitle,
+    html[data-theme="dark"] .demo-service-subtitle,
+    html[data-theme="dark"] .demo-filter-count,
+    html[data-theme="dark"] .demo-panel-sub,
+    html[data-theme="dark"] .demo-audit-desc,
+    html[data-theme="dark"] .field-label,
+    html[data-theme="dark"] .demo-label,
+    html[data-theme="dark"] .demo-field-group-title {
+        color: #94a3b8 !important;
+    }
+    html[data-theme="dark"] .demo-card {
+        background: var(--surface-solid, #131f37) !important;
+        border-color: var(--border, #1e293b) !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
+    }
+    html[data-theme="dark"] .demo-audit-badge,
+    html[data-theme="dark"] .demo-user-badge,
+    html[data-theme="dark"] .demo-ghost-btn,
+    html[data-theme="dark"] .demo-service-toggle,
+    html[data-theme="dark"] .demo-viewer-tab-btn,
+    html[data-theme="dark"] .btn-secondary {
+        background: #1e293b !important;
+        border-color: #334155 !important;
+        color: #f1f5f9 !important;
+    }
+    html[data-theme="dark"] .demo-viewer-tab-btn.active {
+        background: #2563eb !important;
+        border-color: #3b82f6 !important;
+        color: #ffffff !important;
+    }
+    html[data-theme="dark"] .demo-ghost-btn:hover,
+    html[data-theme="dark"] .demo-service-toggle:hover,
+    html[data-theme="dark"] .btn-secondary:hover {
+        background: #27354f !important;
+    }
+    html[data-theme="dark"] .demo-input {
+        background: #0f172a !important;
+        border-color: #334155 !important;
+        color: #f1f5f9 !important;
+    }
+    html[data-theme="dark"] .demo-input-disabled {
+        background: #1e293b !important;
+        color: #64748b !important;
+    }
+    html[data-theme="dark"] .demo-field-group,
+    html[data-theme="dark"] .demo-cheque-image-frame {
+        background: #0f172a !important;
+        border-color: #1e293b !important;
+    }
+    html[data-theme="dark"] .demo-filter-grid,
+    html[data-theme="dark"] .demo-table-panel-header,
+    html[data-theme="dark"] .demo-correction-header,
+    html[data-theme="dark"] .demo-pane-header {
+        border-color: #1e293b !important;
+    }
+    html[data-theme="dark"] .demo-data-table th {
+        background: #0f172a !important;
+        color: #cbd5e1 !important;
+        border-bottom-color: #1e293b !important;
+    }
+    html[data-theme="dark"] .demo-data-table td {
+        border-bottom-color: #1e293b !important;
+        color: #e2e8f0 !important;
+    }
+    html[data-theme="dark"] .demo-clickable-row:hover {
+        background: #1e293b !important;
+    }
+    html[data-theme="dark"] .demo-clickable-row.row-selected {
+        background: #1e3a8a !important;
+    }
+    html[data-theme="dark"] .btn-navy {
+        background: #2563eb !important;
+        border-color: #3b82f6 !important;
+        color: #ffffff !important;
+    }
+    html[data-theme="dark"] .btn-navy:hover:not(:disabled) {
+        background: #1d4ed8 !important;
+    }
+    html[data-theme="dark"] .pill-poll {
+        background: #1e293b !important;
+        border-color: #334155 !important;
+        color: #cbd5e1 !important;
+    }
+    html[data-theme="dark"] .chip-gray {
+        background: #1e293b !important;
+        border-color: #334155 !important;
+        color: #cbd5e1 !important;
+    }
+</style>
+
+@code {
+    private bool _infoCollapsed = false;
+    private bool _filtersCollapsed = false;
+    private bool _autoRun = false;
+    private bool _runningTick = false;
+    private bool _auditOpen = true;
+
+    private string _lastRunTime = "Not run this session";
+    private string _serviceResult = "1 NAK repair item(s) pending.";
+    private string _message = "";
+    private string _successMessage = "";
+
+    private string _imageView = "front";
+
+    // Filters
+    private string _filterChequeNo = "";
+    private string _filterAmount = "";
+    private string _filterMicrAccount = "";
+    private string _filterRouting = "";
+    private string _filterCreditAccount = "";
+
+    // Draft form fields
+    private string _draftChequeNo = "";
+    private string _draftMicrAccount = "";
+    private string _draftRouting = "";
+    private string _draftChequeType = "Current Dated Normal";
+    private string _draftCheckDigit = "";
+    private string _draftRemarks = "";
+
+    private List<NakChequeItem> _cheques = [];
+    private string _selectedId = "";
+
+    private NakChequeItem? SelectedCheque => _cheques.FirstOrDefault(c => c.Id == _selectedId) ?? _cheques.FirstOrDefault();
+
+    private string CurrentChequeImageUrl
+    {
+        get
+        {
+            if (SelectedCheque == null) return "/placeholders/cheque-001.svg";
+            if (_imageView == "rear")
+            {
+                return !string.IsNullOrEmpty(SelectedCheque.ImageRearUrl) 
+                    ? SelectedCheque.ImageRearUrl 
+                    : "/placeholders/cheque-rear.svg";
+            }
+            return !string.IsNullOrEmpty(SelectedCheque.ImageFrontUrl) 
+                ? SelectedCheque.ImageFrontUrl 
+                : "/placeholders/cheque-001.svg";
+        }
+    }
+
+    private List<NakChequeItem> FilteredRows => _cheques.Where(c =>
+        (string.IsNullOrWhiteSpace(_filterChequeNo) || c.ChequeNo.Contains(_filterChequeNo, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterAmount) || c.Amount.ToString().Contains(_filterAmount, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterMicrAccount) || c.MicrAccountNo.Contains(_filterMicrAccount, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterRouting) || c.RoutingNumber.Contains(_filterRouting, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterCreditAccount) || c.AccountNo.Contains(_filterCreditAccount, StringComparison.OrdinalIgnoreCase))
+    ).ToList();
+
+    private List<NakAuditEvent> _auditEvents = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Try fetching actual queue from backend first
+        try
+        {
+            var result = await Client.QueueAsync(new("OUTWARD_NAK_REPAIR", 1, 50, null, null));
+            if (result.IsSuccess && result.Data?.Items != null && result.Data.Items.Count > 0)
+            {
+                _cheques = result.Data.Items.Select(item => new NakChequeItem
+                {
+                    Id = item.ChequeId,
+                    ChequeNo = item.ChequeNo,
+                    Amount = item.Amount,
+                    AccountNo = item.AccountNo,
+                    MicrAccountNo = item.AccountNo,
+                    RoutingNumber = "100002",
+                    NakReason = item.RejectReason ?? "Invalid MICR",
+                    NakRemarks = "Rejected by clearing house",
+                    AccountName = "Customer Account",
+                    AccountStatus = "Active",
+                    Branch = item.BranchCode ?? "Head Office",
+                    Status = "Repair Required",
+                    ImageFrontUrl = "/placeholders/cheque-001.svg",
+                    ImageRearUrl = "/placeholders/cheque-rear.svg"
+                }).ToList();
+            }
+        }
+        catch
+        {
+            // fallback to seed data
+        }
+
+        // If no items in database queue, populate with demo seed items matching screenshot
+        if (_cheques.Count == 0)
+        {
+            _cheques =
+            [
+                new NakChequeItem
+                {
+                    Id = "CHQ-OUT-006",
+                    ChequeNo = "661004",
+                    Amount = 3325000,
+                    AccountNo = "002-010-440998871",
+                    MicrAccountNo = "002010440998871",
+                    RoutingNumber = "BADRT",
+                    NakReason = "Invalid MICR",
+                    NakRemarks = "No remarks supplied",
+                    AccountName = "Sample Logistics",
+                    AccountStatus = "Closed",
+                    Branch = "Branch 002",
+                    Status = "Repair Required",
+                    ChequeType = "Current Dated Normal",
+                    CheckDigit = "",
+                    ImageFrontUrl = "/placeholders/cheque-001.svg",
+                    ImageRearUrl = "/placeholders/cheque-rear.svg"
+                }
+            ];
+        }
+
+        if (SelectedCheque != null)
+        {
+            SelectCheque(SelectedCheque);
+        }
+
+        _auditEvents =
+        [
+            new() { Timestamp = "8/19/2026, 10:32:52 AM", User = "CTS Background Service", Action = "Return ICL Creation", Description = "No inward return instruments ready for file creation." },
+            new() { Timestamp = "8/18/2026, 4:08:34 PM", User = "CTS Background Service", Action = "Return ICL Upload File Generated", Description = "MMDB_RETURN_20260818_005.icl created for CBM." },
+            new() { Timestamp = "8/18/2026, 3:47:18 PM", User = "Admin One", Action = "Complete Inward NAK Repair", Description = "120103 returned to return ICL creation." },
+            new() { Timestamp = "8/17/2026, 9:38:03 PM", User = "CTS Background Service", Action = "Inward Forward Download ICL Imported", Description = "CBM_FORWARD_DOWNLOAD_20260817.icl imported with 2 cheque(s)." },
+            new() { Timestamp = "8/17/2026, 9:09:48 PM", User = "CTS Background Service", Action = "Run Service Tick", Description = "No eligible outward service workitems found." },
+            new() { Timestamp = "8/17/2026, 9:09:33 PM", User = "CTS Background Service", Action = "ICL forward upload file generated for CBM.", Description = "MMDB_OUT_20260817_003.icl created with 3 cheque(s)." },
+            new() { Timestamp = "8/17/2026, 9:09:33 PM", User = "CTS Background Service", Action = "Run Service Tick", Description = "2 due outward cheques moved from hold to ICL generation." },
+            new() { Timestamp = "8/17/2026, 9:09:11 PM", User = "Admin One", Action = "Authorize Outward Batch", Description = "Accepted 1, discarded 0" }
+        ];
+
+        _serviceResult = $"{_cheques.Count} NAK repair item(s) pending.";
+    }
+
+    private void SelectCheque(NakChequeItem item)
+    {
+        _selectedId = item.Id;
+        _draftChequeNo = item.ChequeNo;
+        _draftMicrAccount = item.MicrAccountNo;
+        _draftRouting = item.RoutingNumber;
+        _draftChequeType = item.ChequeType;
+        _draftCheckDigit = item.CheckDigit;
+        _draftRemarks = item.Remarks;
+        _message = "";
+        _successMessage = "";
+    }
+
+    private async Task RunTick()
+    {
+        _runningTick = true;
+        await Task.Delay(350);
+        _lastRunTime = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt");
+        _serviceResult = $"{_cheques.Count} NAK repair item(s) pending.";
+        _runningTick = false;
+    }
+
+    private async Task AcceptCheque()
+    {
+        if (SelectedCheque == null) return;
+        _message = "";
+        _successMessage = "";
+
+        // Update working draft
+        SelectedCheque.ChequeNo = _draftChequeNo;
+        SelectedCheque.MicrAccountNo = _draftMicrAccount;
+        SelectedCheque.RoutingNumber = _draftRouting;
+        SelectedCheque.ChequeType = _draftChequeType;
+        SelectedCheque.CheckDigit = _draftCheckDigit;
+        SelectedCheque.Remarks = _draftRemarks;
+
+        try
+        {
+            // Call API if connected
+            await Client.ActionAsync(new(SelectedCheque.Id, "ACCEPT", string.IsNullOrWhiteSpace(_draftRemarks) ? null : _draftRemarks));
+        }
+        catch
+        {
+            // ignore API errors and apply UI state
+        }
+
+        _auditEvents.Insert(0, new()
+        {
+            Timestamp = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt"),
+            User = "admin1",
+            Action = "Accept Outward NAK Cheque",
+            Description = $"Cheque {SelectedCheque.ChequeNo} repaired and routed to ICL generation."
+        });
+
+        _successMessage = $"Cheque {SelectedCheque.ChequeNo} has been accepted and routed forward.";
+        _cheques.Remove(SelectedCheque);
+        _serviceResult = $"{_cheques.Count} NAK repair item(s) pending.";
+
+        if (_cheques.Count > 0)
+        {
+            SelectCheque(_cheques[0]);
+        }
+    }
+
+    private async Task DiscardCheque()
+    {
+        if (SelectedCheque == null) return;
+        _message = "";
+        _successMessage = "";
+
+        if (string.IsNullOrWhiteSpace(_draftRemarks))
+        {
+            _message = "Remarks are mandatory before discarding a NAK repair cheque.";
+            return;
+        }
+
+        try
+        {
+            await Client.ActionAsync(new(SelectedCheque.Id, "DISCARD", _draftRemarks));
+        }
+        catch
+        {
+            // ignore API errors and apply UI state
+        }
+
+        _auditEvents.Insert(0, new()
+        {
+            Timestamp = DateTime.Now.ToString("M/d/yyyy, h:mm:ss tt"),
+            User = "admin1",
+            Action = "Discard Outward NAK Cheque",
+            Description = $"Cheque {SelectedCheque.ChequeNo} discarded. Remarks: {_draftRemarks}"
+        });
+
+        _successMessage = $"Cheque {SelectedCheque.ChequeNo} has been discarded.";
+        _cheques.Remove(SelectedCheque);
+        _serviceResult = $"{_cheques.Count} NAK repair item(s) pending.";
+
+        if (_cheques.Count > 0)
+        {
+            SelectCheque(_cheques[0]);
+        }
+    }
+
+    public sealed class NakChequeItem
+    {
+        public string Id { get; set; } = string.Empty;
+        public string ChequeNo { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string AccountNo { get; set; } = string.Empty;
+        public string MicrAccountNo { get; set; } = string.Empty;
+        public string RoutingNumber { get; set; } = string.Empty;
+        public string? NakReason { get; set; }
+        public string? NakRemarks { get; set; }
+        public string AccountName { get; set; } = string.Empty;
+        public string AccountStatus { get; set; } = "Closed";
+        public string Branch { get; set; } = string.Empty;
+        public string Status { get; set; } = "Repair Required";
+        public string ChequeType { get; set; } = "Current Dated Normal";
+        public string CheckDigit { get; set; } = "";
+        public string Remarks { get; set; } = "";
+        public string? ImageFrontUrl { get; set; }
+        public string? ImageRearUrl { get; set; }
+    }
+
+    public sealed class NakAuditEvent
+    {
+        public string Timestamp { get; set; } = string.Empty;
+        public string User { get; set; } = string.Empty;
+        public string Action { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+    }
+}

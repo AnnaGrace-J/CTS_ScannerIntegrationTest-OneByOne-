@@ -1,0 +1,17 @@
+@page "/admin/archive"
+@attribute [Authorize(Policy = PermissionCatalog.AdminArchiveViewPolicy)]
+@inject AdministrationApiService Client
+
+<PageTitle>Archive · ACE CTS</PageTitle>
+<PageHeader Section="Administration" Title="Clearing Archive" Subtitle="Review completed instruments retained for audit, reconciliation and investigation." Badge="Read only" />
+
+<section class="panel"><div class="filter-bar"><div class="search-field"><span>⌕</span><input @bind="_search" placeholder="Search archived item or cheque number" /></div><select @bind="_direction"><option value="">All directions</option><option value="OUTWARD">Outward</option><option value="INWARD">Inward</option></select><button class="secondary-button" @onclick="LoadAsync">Apply filters</button><span class="result-count">@(_data?.TotalCount ?? 0) archived</span></div>
+    @if (_data is null) { <LoadingState Error="@_error" /> } else { <ChequeTable Items="@_data.Items" /> }
+</section>
+<div class="archive-note"><span>▰</span><div><strong>Archive retention</strong><p>Completed workitems are immutable in this view. Retrieval and export actions are recorded in the audit trail.</p></div></div>
+
+@code {
+    private string? _search; private string _direction = string.Empty; private string? _error; private ArchiveResponseModel? _data;
+    protected override Task OnInitializedAsync() => LoadAsync();
+    private async Task LoadAsync() { var result = await Client.ArchiveAsync(new(_search, _direction)); if (result.IsSuccess) _data = result.Data; else _error = result.Message; }
+}

@@ -1,0 +1,364 @@
+@page "/admin/users/create"
+@using CTS.App.Services
+@attribute [Authorize(Policy = PermissionCatalog.PolicyPrefix + PermissionCatalog.AdminUserCreate)]
+@inject AdministrationApiService Client
+@inject ToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Create User · ACE CTS</PageTitle>
+
+<div class="page-header-container">
+    <div>
+        <a class="back-link" href="/admin">&larr; Back to System Administration</a>
+        <h1 class="page-title">Create New Operations User</h1>
+        <p class="page-subtitle">Fill in employee details and assign access privileges for the Cheque Truncation System.</p>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <LoadingState />
+}
+else
+{
+    <EditForm Model="@_model" OnValidSubmit="CreateUserAsync">
+        <DataAnnotationsValidator />
+
+        <div class="form-grid-layout">
+            <!-- Account & Security Section -->
+            <section class="form-section">
+                <div class="section-header">
+                    <h3>Account Credentials & Access Role</h3>
+                    <p>Primary authentication details and permission levels.</p>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Login ID <span class="required-star">*</span></label>
+                        <input class="form-control" @bind="_model.UserName" placeholder="e.g. maker.yangon" required />
+                        <small class="help-text">Unique username used for signing in.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Full Name <span class="required-star">*</span></label>
+                        <input class="form-control" @bind="_model.FullName" placeholder="e.g. Daw Aye Aye Win" required />
+                        <small class="help-text">Legal name of the employee.</small>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>System Role <span class="required-star">*</span></label>
+                        <select class="form-control" @bind="_model.Role" required>
+                            <option value="MAKER">MAKER - Capture & Processing</option>
+                            <option value="CHECKER">CHECKER - Verification & Approval</option>
+                            <option value="ADMIN">ADMIN - System Administrator</option>
+                        </select>
+                        <small class="help-text">Controls system permissions and workflows.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Branch Code <span class="required-star">*</span></label>
+                        <select class="form-control" value="@_model.BranchId" @onchange="OnBranchChanged" required>
+                            @foreach (var branch in _branches)
+                            {
+                                <option value="@branch.BranchId">@branch.BranchCode - @branch.BranchName</option>
+                            }
+                        </select>
+                        <small class="help-text">Operational clearing branch location.</small>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group full-width">
+                        <label>Branch Name (Auto-filled)</label>
+                        <input class="form-control disabled-input" value="@_selectedBranchName" readonly />
+                    </div>
+                </div>
+            </section>
+
+            <!-- Employee Identification Section -->
+            <section class="form-section">
+                <div class="section-header">
+                    <h3>Employee Identification & Recovery</h3>
+                    <p>Mandatory unique identifiers and recovery email.</p>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Employee ID <span class="required-star">*</span></label>
+                        <input class="form-control" @bind="_model.EmployeeId" placeholder="e.g. EMP-1092" required />
+                        <small class="help-text">Unique company employee code.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Personal Email <span class="required-star">*</span></label>
+                        <input type="email" class="form-control" @bind="_model.PersonalEmail" placeholder="e.g. user@example.com" required />
+                        <small class="help-text">Email address for account notifications.</small>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Personal Metadata Section -->
+            <section class="form-section">
+                <div class="section-header">
+                    <h3>Employee Details (Optional)</h3>
+                    <p>Additional HR metadata and contact information.</p>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Date of Birth</label>
+                        <input type="date" class="form-control" @bind="_model.DateOfBirth" />
+                    </div>
+                    <div class="form-group">
+                        <label>Gender</label>
+                        <select class="form-control" @bind="_model.Gender">
+                            <option value="">-- Select Gender --</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Contact Number</label>
+                        <input type="tel" class="form-control" @bind="_model.ContactNumber" placeholder="e.g. +95 9 123 456 789" />
+                    </div>
+                    <div class="form-group">
+                        <label>Department</label>
+                        <input class="form-control" @bind="_model.Department" placeholder="e.g. Clearing Operations" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Joining Date</label>
+                        <input type="date" class="form-control" @bind="_model.JoiningDate" />
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="form-actions-bar">
+            <a class="secondary-button" href="/admin">Cancel</a>
+            <button class="primary-button" type="submit" disabled="@_submitting">
+                @if (_submitting)
+                {
+                    <span>Creating user...</span>
+                }
+                else
+                {
+                    <span>Create User</span>
+                }
+            </button>
+        </div>
+    </EditForm>
+}
+
+<style>
+    .page-header-container {
+        margin-bottom: 24px;
+    }
+
+    .back-link {
+        display: inline-block;
+        color: #3b82f6;
+        text-decoration: none;
+        font-size: 0.9rem;
+        font-weight: 500;
+        margin-bottom: 8px;
+    }
+
+    .back-link:hover {
+        text-decoration: underline;
+    }
+
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-color, #111827);
+        margin: 0 0 4px 0;
+    }
+
+    .page-subtitle {
+        color: #6b7280;
+        font-size: 0.95rem;
+        margin: 0;
+    }
+
+    .form-grid-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+    }
+
+    .form-section {
+        background: var(--card-bg, #ffffff);
+        border: 1px solid var(--border-color, #e5e7eb);
+        border-radius: 10px;
+        padding: 24px;
+    }
+
+    .section-header {
+        margin-bottom: 20px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-color, #f3f4f6);
+    }
+
+    .section-header h3 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0 0 4px 0;
+    }
+
+    .section-header p {
+        color: #6b7280;
+        font-size: 0.85rem;
+        margin: 0;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 20px;
+        margin-bottom: 16px;
+    }
+
+    .form-row:last-child {
+        margin-bottom: 0;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .form-group.full-width {
+        grid-column: 1 / -1;
+    }
+
+    .form-group label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--text-color, #374151);
+    }
+
+    .required-star {
+        color: #ef4444;
+        font-weight: bold;
+        margin-left: 2px;
+    }
+
+    .form-control {
+        padding: 10px 14px;
+        border: 1px solid var(--border-color, #d1d5db);
+        border-radius: 6px;
+        font-size: 0.95rem;
+        background: var(--input-bg, #ffffff);
+        color: var(--text-color, #111827);
+        transition: border-color 0.15s ease;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    .form-control.disabled-input {
+        background: #f3f4f6;
+        color: #4b5563;
+        cursor: not-allowed;
+    }
+
+    .help-text {
+        font-size: 0.78rem;
+        color: #6b7280;
+    }
+
+    .form-actions-bar {
+        margin-top: 24px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        padding-top: 16px;
+    }
+</style>
+
+@code {
+    private FormModel _model = new();
+    private IReadOnlyList<BranchModel> _branches = Array.Empty<BranchModel>();
+    private string _selectedBranchName = string.Empty;
+    private bool _loading = true;
+    private bool _submitting = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var overview = await Client.OverviewAsync();
+        if (overview.IsSuccess && overview.Data is not null)
+        {
+            _branches = overview.Data.Branches;
+            if (_branches.Count > 0)
+            {
+                _model.BranchId = _branches[0].BranchId;
+                _selectedBranchName = _branches[0].BranchName;
+            }
+        }
+        else
+        {
+            ToastService.ShowError(overview.Message ?? "Failed to load branch list.");
+        }
+        _loading = false;
+    }
+
+    private void OnBranchChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var branchId))
+        {
+            _model.BranchId = branchId;
+            var branch = _branches.FirstOrDefault(b => b.BranchId == branchId);
+            _selectedBranchName = branch?.BranchName ?? string.Empty;
+        }
+    }
+
+    private async Task CreateUserAsync()
+    {
+        _submitting = true;
+
+        var request = new CreateAdminUserRequestModel(
+            UserName: _model.UserName,
+            FullName: _model.FullName,
+            Role: _model.Role,
+            BranchId: _model.BranchId,
+            PersonalEmail: _model.PersonalEmail,
+            EmployeeId: _model.EmployeeId,
+            DateOfBirth: _model.DateOfBirth,
+            Gender: _model.Gender,
+            ContactNumber: _model.ContactNumber,
+            JoiningDate: _model.JoiningDate,
+            Department: _model.Department
+        );
+
+        var result = await Client.CreateUserAsync(request);
+        _submitting = false;
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            ToastService.ShowSuccess($"User '{_model.UserName}' created! Temp password: {result.Data.TemporaryPassword}");
+            Navigation.NavigateTo("/admin");
+        }
+        else
+        {
+            ToastService.ShowError(result.Message ?? "Failed to create user.");
+        }
+    }
+
+    private class FormModel
+    {
+        public string UserName { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string Role { get; set; } = "MAKER";
+        public int BranchId { get; set; }
+        public string PersonalEmail { get; set; } = string.Empty;
+        public string EmployeeId { get; set; } = string.Empty;
+        public DateOnly? DateOfBirth { get; set; }
+        public string? Gender { get; set; }
+        public string? ContactNumber { get; set; }
+        public DateOnly? JoiningDate { get; set; }
+        public string? Department { get; set; }
+    }
+}

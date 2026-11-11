@@ -1,0 +1,118 @@
+<section class="panel filter-panel">
+    <div class="panel-heading">
+        <div>
+            <span class="eyebrow">QUERY CRITERIA</span>
+            <h2>ICL Intake Filters</h2>
+        </div>
+        <div class="filter-header-actions">
+            <span class="result-count">@ResultCount result(s)</span>
+            <button type="button" class="secondary-button" @onclick="HandleReset">Reset Filters</button>
+            <button type="button" class="primary-button" @onclick="HandleApply">Apply Filters</button>
+        </div>
+    </div>
+
+    <div class="filter-grid-11">
+        <div class="filter-item">
+            <label for="icl-file-name">ICL File Name</label>
+            <input id="icl-file-name" @bind="Model.FileName" placeholder="e.g. ICL-FD-20260911-001" />
+        </div>
+        <div class="filter-item">
+            <label for="icl-source-bank">Source / Presenting Bank</label>
+            <input id="icl-source-bank" @bind="Model.SourceBank" placeholder="e.g. KBZ Bank / 100001" />
+        </div>
+        <div class="filter-item">
+            <label for="icl-cheque-no">Cheque No.</label>
+            <input id="icl-cheque-no" @bind="Model.ChequeNo" placeholder="e.g. 100006" />
+        </div>
+        <div class="filter-item">
+            <label for="icl-account-no">Drawee Account No.</label>
+            <input id="icl-account-no" @bind="Model.AccountNo" placeholder="e.g. 0101001006" />
+        </div>
+        <div class="filter-item">
+            <label for="icl-branch-code">Branch Code</label>
+            <input id="icl-branch-code" @bind="Model.BranchCode" placeholder="e.g. HO / 001" />
+        </div>
+        <div class="filter-item">
+            <label for="icl-amount">Amount</label>
+            <input id="icl-amount" inputmode="decimal" @bind="Model.Amount" placeholder="e.g. 5000000" />
+        </div>
+        <div class="filter-item">
+            <label for="icl-status">Intake Status</label>
+            <select id="icl-status" @bind="Model.IntakeStatus">
+                <option value="">All Statuses</option>
+                <option value="Pending">Pending Validation</option>
+                <option value="Validated">Validated</option>
+                <option value="Exception">Exception</option>
+                <option value="Imported">Imported</option>
+            </select>
+        </div>
+        <div class="filter-item">
+            <label for="icl-session">Clearing Session</label>
+            <select id="icl-session" @bind="Model.ClearingSession">
+                <option value="">All Sessions</option>
+                <option value="Session 1">Session 1 (10:00 - 14:00)</option>
+                <option value="Session 2">Session 2 (14:30 - 17:00)</option>
+            </select>
+        </div>
+        <div class="filter-item">
+            <label for="icl-value-date">Value Date</label>
+            <input id="icl-value-date" type="date" @bind="Model.ValueDate" />
+        </div>
+        <div class="filter-item">
+            <label for="icl-receive-date">Received Date</label>
+            <input id="icl-receive-date" type="date" @bind="Model.ReceivedDate" />
+        </div>
+        <div class="filter-item">
+            <label for="icl-currency">Currency</label>
+            <select id="icl-currency" @bind="Model.Currency">
+                <option value="">All Currencies</option>
+                <option value="MMK">MMK · Myanmar Kyat</option>
+                <option value="USD">USD · US Dollar</option>
+            </select>
+        </div>
+    </div>
+</section>
+
+@code {
+    public sealed class FilterModel
+    {
+        public string FileName { get; set; } = string.Empty;
+        public string SourceBank { get; set; } = string.Empty;
+        public string ChequeNo { get; set; } = string.Empty;
+        public string AccountNo { get; set; } = string.Empty;
+        public string BranchCode { get; set; } = string.Empty;
+        public string Amount { get; set; } = string.Empty;
+        public string IntakeStatus { get; set; } = string.Empty;
+        public string ClearingSession { get; set; } = string.Empty;
+        public DateOnly? ValueDate { get; set; }
+        public DateOnly? ReceivedDate { get; set; }
+        public string Currency { get; set; } = string.Empty;
+
+        public void Clear()
+        {
+            FileName = string.Empty;
+            SourceBank = string.Empty;
+            ChequeNo = string.Empty;
+            AccountNo = string.Empty;
+            BranchCode = string.Empty;
+            Amount = string.Empty;
+            IntakeStatus = string.Empty;
+            ClearingSession = string.Empty;
+            ValueDate = null;
+            ReceivedDate = null;
+            Currency = string.Empty;
+        }
+    }
+
+    [Parameter] public FilterModel Model { get; set; } = new();
+    [Parameter] public int ResultCount { get; set; }
+    [Parameter] public EventCallback OnApply { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+
+    private async Task HandleApply() => await OnApply.InvokeAsync();
+    private async Task HandleReset()
+    {
+        Model.Clear();
+        await OnReset.InvokeAsync();
+    }
+}

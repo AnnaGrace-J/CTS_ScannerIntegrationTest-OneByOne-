@@ -1,0 +1,23 @@
+<div class="changed-field-container @(Changed ? "is-changed" : null)">
+    <div class="changed-field-input">
+        @ChildContent
+    </div>
+    <div class="changed-field-diff">
+        <div class="diff-card">
+            <span class="diff-label">ORIGINAL @Label</span>
+            <span class="diff-value">@(string.IsNullOrWhiteSpace(Original) ? "-" : Original)</span>
+        </div>
+        <div class="diff-card @(Changed ? "diff-updated-active" : null)">
+            <span class="diff-label @(Changed ? "label-changed" : null)">UPDATED @Label</span>
+            <span class="diff-value">@(string.IsNullOrWhiteSpace(Updated) ? "-" : Updated)</span>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public string Original { get; set; } = string.Empty;
+    [Parameter] public string Updated { get; set; } = string.Empty;
+    [Parameter] public bool Changed { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,885 @@
+@page "/outward/repair"
+@attribute [Authorize]
+@inject WorkspaceApiService Client
+
+<PageTitle>Outward Repair · ACE CTS</PageTitle>
+
+@if (!_reviewMode)
+{
+    @* STAGE 1: BATCH QUEUE & SEARCH LIST VIEW *@
+    <PageHeader Section="Outward Clearing" Title="Outward Repair" Subtitle="Correct batches returned by authorizer." Badge="@($"{FilteredBatches.Count} Batches")">
+        <button type="button" class="secondary-button" disabled="@_loading" @onclick="LoadQueueAsync">↻ Refresh</button>
+    </PageHeader>
+
+    @if (_loading)
+    {
+        <LoadingState />
+    }
+    else
+    {
+        <section class="workflow-summary" aria-label="Repair queue summary">
+            <article class="metric-card">
+                <span>Repair Batches</span>
+                <strong class="@(FilteredBatches.Count > 0 ? "tone-warning" : "tone-success")">@FilteredBatches.Count.ToString("N0")</strong>
+                <small>Returned by authorizer</small>
+            </article>
+            <article class="metric-card">
+                <span>Visible Instruments</span>
+                <strong>@FilteredBatches.Sum(b => b.Cheques.Count).ToString("N0")</strong>
+                <small>Filtered queue</small>
+            </article>
+            <article class="metric-card">
+                <span>Total Amount</span>
+                <strong class="tone-success">MMK @FilteredBatches.Sum(b => b.TotalAmount).ToString("N2")</strong>
+                <small>Visible amount</small>
+            </article>
+            <article class="metric-card">
+                <span>Oldest Return Age</span>
+                <strong class="tone-warning">@OldestAge</strong>
+                <small>SLA tracking</small>
+            </article>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(_notice))
+        {
+            <div class="alert" role="status"><strong>Notice</strong><span>@_notice</span></div>
+        }
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert danger" role="alert"><strong>Error</strong><span>@_error</span></div>
+        }
+
+        <RepairFilterPanel Model="@_filter" ResultCount="@FilteredBatches.Count" OnApply="ApplyFilter" OnReset="ResetFilter" />
+
+        <section class="panel queue-table-panel">
+            <div class="panel-heading">
+                <div>
+                    <span class="eyebrow">WORK QUEUE</span>
+                    <h2>Repair Batch Queue</h2>
+                </div>
+                <span class="result-count">@FilteredBatches.Count batch(es)</span>
+            </div>
+
+            @if (FilteredBatches.Count == 0)
+            {
+                <div class="empty-state-card">
+                    <p>No batches currently requiring repair.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="cts-table">
+                        <thead>
+                            <tr>
+                                <th>Batch ID</th>
+                                <th>Branch</th>
+                                <th>Repair Reason</th>
+                                <th>Returned By</th>
+                                <th>Returned Date/Time</th>
+                                <th>Maker</th>
+                                <th>Status</th>
+                                <th class="text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var batch in FilteredBatches)
+                            {
+                                <tr class="interactive-row @(batch.BatchId == _selectedBatch?.BatchId ? "selected" : null)" @onclick="() => OpenBatchDetail(batch)">
+                                    <td class="font-bold">@batch.BatchId</td>
+                                    <td>@batch.BranchCode</td>
+                                    <td class="text-danger">@batch.RepairReason</td>
+                                    <td>@batch.ReturnedBy</td>
+                                    <td>@batch.ReturnedAt</td>
+                                    <td>@batch.Maker</td>
+                                    <td><StatusPill Status="@batch.Status" /></td>
+                                    <td class="text-right">
+                                        <button type="button" class="primary-button-sm" @onclick="() => OpenBatchDetail(batch)" @onclick:stopPropagation>
+                                            Open Repair
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+}
+else if (_selectedBatch is not null && _activeCheque is not null)
+{
+    @* STAGE 2: BATCH REPAIR DETAIL WORKSPACE *@
+    <PageHeader Section="Outward Clearing / Repair" Title="@($"Batch Repair {_selectedBatch.BatchId}")" Subtitle="Review and correct returned instrument data." Badge="@($"Item {_currentChequeIndex + 1} of {_selectedBatch.Cheques.Count}")">
+        <button type="button" class="secondary-button" @onclick="PromptExit">‹ Back to Queue</button>
+    </PageHeader>
+
+    <div class="exception-banner">
+        <span class="banner-icon" aria-hidden="true">⚠️</span>
+        <div class="banner-content">
+            <strong>Returned by @_selectedBatch.ReturnedBy on @_selectedBatch.ReturnedAt</strong>
+            <p>@_selectedBatch.RepairReason</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_notice))
+    {
+        <div class="alert" role="status"><strong>Notice</strong><span>@_notice</span></div>
+    }
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert danger" role="alert"><strong>Error</strong><span>@_error</span></div>
+    }
+
+    <div class="repair-workspace-grid">
+        @* LEFT COLUMN: CHEQUE IMAGE VIEWER & INSTRUMENT LIST *@
+        <div class="repair-visual-col">
+            <ChequeImageViewer FrontSrc="@_activeCheque.FrontImageUrl"
+                               RearSrc="@_activeCheque.BackImageUrl"
+                               SignatureSrc="@_activeCheque.SignatureImageUrl"
+                               Reference="@($"Cheque {_activeCheque.ChequeNo} / {_activeCheque.ChequeId}")"
+                               Status="@_activeCheque.Status"
+                               ChangedCount="@GetChangedFieldsCount(_activeCheque)" />
+
+            <section class="panel instrument-list-panel">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">BATCH INSTRUMENTS</span>
+                        <h2>Batch Instrument List</h2>
+                    </div>
+                    <span class="result-count">@_selectedBatch.Cheques.Count cheque(s)</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="cts-table mini-table">
+                        <thead>
+                            <tr>
+                                <th>Cheque No</th>
+                                <th>Routing No</th>
+                                <th>MICR Account</th>
+                                <th>Amount</th>
+                                <th>Changed</th>
+                                <th>Discard</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < _selectedBatch.Cheques.Count; i++)
+                            {
+                                var idx = i;
+                                var chk = _selectedBatch.Cheques[idx];
+                                var isSel = chk.ChequeId == _activeCheque.ChequeId;
+                                var changedCount = GetChangedFieldsCount(chk);
+                                <tr class="interactive-row @(isSel ? "selected" : null)" @onclick="() => SelectCheque(idx)">
+                                    <td class="font-bold">@chk.ChequeNo</td>
+                                    <td>@chk.RoutingNo</td>
+                                    <td>@chk.MicrAccountNo</td>
+                                    <td>MMK @chk.Amount.ToString("N2")</td>
+                                    <td>
+                                        <span class="changed-badge @(changedCount > 0 ? "has-changes" : null)">
+                                            @changedCount
+                                        </span>
+                                    </td>
+                                    <td>@(chk.IsDiscarded ? "Yes" : "No")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        @* RIGHT COLUMN: EDITABLE FORMS & SUMMARIES *@
+        <div class="repair-forms-col">
+            @* PANEL 1: RETURNED FOR REPAIR SUMMARY *@
+            <section class="panel form-panel">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">AUDIT CONTEXT</span>
+                        <h2>Returned for Repair Summary</h2>
+                    </div>
+                </div>
+                <dl class="meta-field-grid">
+                    <div><dt>Returned By</dt><dd>@_selectedBatch.ReturnedBy</dd></div>
+                    <div><dt>Return Date/Time</dt><dd>@_selectedBatch.ReturnedAt</dd></div>
+                    <div><dt>Repair Remarks</dt><dd class="text-danger">@_selectedBatch.RepairReason</dd></div>
+                    <div><dt>Changed Fields</dt><dd><strong class="@(TotalBatchChangedCount > 0 ? "text-warning font-bold" : "text-success font-bold")">@TotalBatchChangedCount field(s)</strong></dd></div>
+                </dl>
+            </section>
+
+            @* PANEL 2: EDITABLE MICR FIELDS *@
+            <section class="panel form-panel">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">MICR DATA CORRECTION</span>
+                        <h2>Editable MICR Fields</h2>
+                    </div>
+                </div>
+
+                <div class="form-fields-stack">
+                    <ChangedField Label="Cheque No."
+                                  Original="@_activeCheque.OriginalChequeNo"
+                                  Updated="@_activeCheque.ChequeNo"
+                                  Changed="@(_activeCheque.ChequeNo != _activeCheque.OriginalChequeNo)">
+                        <label for="e-cheque-no">Cheque Number</label>
+                        <input id="e-cheque-no" @bind="_activeCheque.ChequeNo" @bind:after="OnChequeFieldModified" />
+                    </ChangedField>
+
+                    <ChangedField Label="MICR Account No."
+                                  Original="@_activeCheque.OriginalMicrAccountNo"
+                                  Updated="@_activeCheque.MicrAccountNo"
+                                  Changed="@(_activeCheque.MicrAccountNo != _activeCheque.OriginalMicrAccountNo)">
+                        <label for="e-micr-acc">MICR Account Number</label>
+                        <input id="e-micr-acc" @bind="_activeCheque.MicrAccountNo" @bind:after="OnChequeFieldModified" />
+                    </ChangedField>
+
+                    <ChangedField Label="Routing No."
+                                  Original="@_activeCheque.OriginalRoutingNo"
+                                  Updated="@_activeCheque.RoutingNo"
+                                  Changed="@(_activeCheque.RoutingNo != _activeCheque.OriginalRoutingNo)">
+                        <label for="e-routing-no">Routing Number</label>
+                        <input id="e-routing-no" @bind="_activeCheque.RoutingNo" @bind:after="OnChequeFieldModified" />
+                    </ChangedField>
+
+                    <ChangedField Label="Cheque Type"
+                                  Original="@_activeCheque.OriginalChequeType"
+                                  Updated="@_activeCheque.ChequeType"
+                                  Changed="@(_activeCheque.ChequeType != _activeCheque.OriginalChequeType)">
+                        <label for="e-cheque-type">Cheque Type</label>
+                        <select id="e-cheque-type" @bind="_activeCheque.ChequeType" @bind:after="OnChequeFieldModified">
+                            <option value="1">1 · Normal / CDC Cheque</option>
+                            <option value="2">2 · Payment Order (PO)</option>
+                            <option value="3">3 · Government Cheque</option>
+                        </select>
+                    </ChangedField>
+
+                    <ChangedField Label="Check Digit"
+                                  Original="@_activeCheque.OriginalCheckDigit"
+                                  Updated="@_activeCheque.CheckDigit"
+                                  Changed="@(_activeCheque.CheckDigit != _activeCheque.OriginalCheckDigit)">
+                        <label for="e-check-digit">Check Digit</label>
+                        <input id="e-check-digit" @bind="_activeCheque.CheckDigit" @bind:after="OnChequeFieldModified" />
+                    </ChangedField>
+                </div>
+            </section>
+
+            @* PANEL 3: EDITABLE AMOUNT / DATE *@
+            <section class="panel form-panel">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">FINANCIAL DATA</span>
+                        <h2>Editable Amount / Date</h2>
+                    </div>
+                </div>
+
+                <div class="form-fields-stack">
+                    <ChangedField Label="Amount"
+                                  Original="@_activeCheque.OriginalAmount.ToString("N2")"
+                                  Updated="@_activeCheque.Amount.ToString("N2")"
+                                  Changed="@(_activeCheque.Amount != _activeCheque.OriginalAmount)">
+                        <label for="e-amount">Cheque Amount (MMK)</label>
+                        <input id="e-amount" type="number" step="0.01" @bind="_activeCheque.Amount" @bind:after="OnChequeFieldModified" />
+                    </ChangedField>
+
+                    <ChangedField Label="Cheque Date"
+                                  Original="@(_activeCheque.OriginalChequeDate?.ToString("yyyy-MM-dd") ?? "")"
+                                  Updated="@(_activeCheque.ChequeDate?.ToString("yyyy-MM-dd") ?? "")"
+                                  Changed="@(_activeCheque.ChequeDate != _activeCheque.OriginalChequeDate)">
+                        <label for="e-cheque-date">Cheque Issue Date</label>
+                        <input id="e-cheque-date" type="date" @bind="_activeCheque.ChequeDate" @bind:after="OnChequeFieldModified" />
+                    </ChangedField>
+                </div>
+            </section>
+
+            @* PANEL 4: DRAWER / REMARKS *@
+            <section class="panel form-panel">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">SUPPLEMENTARY DATA</span>
+                        <h2>Drawer / Remarks</h2>
+                    </div>
+                </div>
+
+                <div class="form-fields-stack">
+                    <ChangedField Label="Drawer Name"
+                                  Original="@_activeCheque.OriginalDrawerName"
+                                  Updated="@_activeCheque.DrawerName"
+                                  Changed="@(_activeCheque.DrawerName != _activeCheque.OriginalDrawerName)">
+                        <label for="e-drawer-name">Drawer Name</label>
+                        <input id="e-drawer-name" @bind="_activeCheque.DrawerName" @bind:after="OnChequeFieldModified" />
+                    </ChangedField>
+
+                    <ChangedField Label="Remarks"
+                                  Original="@_activeCheque.OriginalRemarks"
+                                  Updated="@_activeCheque.Remarks"
+                                  Changed="@(_activeCheque.Remarks != _activeCheque.OriginalRemarks)">
+                        <label for="e-remarks">Remarks</label>
+                        <input id="e-remarks" @bind="_activeCheque.Remarks" @bind:after="OnChequeFieldModified" />
+                    </ChangedField>
+
+                    <ChangedField Label="Discard Cheque"
+                                  Original="@(_activeCheque.OriginalIsDiscarded ? "Yes" : "No")"
+                                  Updated="@(_activeCheque.IsDiscarded ? "Yes" : "No")"
+                                  Changed="@(_activeCheque.IsDiscarded != _activeCheque.OriginalIsDiscarded)">
+                        <label class="checkbox-field-label">
+                            <input type="checkbox" @bind="_activeCheque.IsDiscarded" @bind:after="OnChequeFieldModified" />
+                            <span>Discard Cheque from Batch</span>
+                        </label>
+                    </ChangedField>
+
+                    <div class="form-field">
+                        <label for="e-repair-notes">Repair Notes (Audit)</label>
+                        <textarea id="e-repair-notes" rows="2" placeholder="Provide reason or notes for maker repair..." @bind="_repairNotes"></textarea>
+                    </div>
+                </div>
+            </section>
+
+            @* PANEL 5: BATCH SUMMARY *@
+            <section class="panel form-panel summary-panel">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">RECONCILIATION</span>
+                        <h2>Batch Summary</h2>
+                    </div>
+                </div>
+                <dl class="summary-list">
+                    <div><dt>Batch ID</dt><dd class="font-bold">@_selectedBatch.BatchId</dd></div>
+                    <div><dt>Total Cheques</dt><dd>@_selectedBatch.Cheques.Count</dd></div>
+                    <div><dt>Batch Type</dt><dd>@_selectedBatch.BatchType</dd></div>
+                    <div><dt>Batch Header Amount</dt><dd>MMK @_selectedBatch.TotalAmount.ToString("N2")</dd></div>
+                    <div><dt>Active Calculated Amount</dt><dd class="font-bold tone-success">MMK @CalculatedActiveAmount.ToString("N2")</dd></div>
+                </dl>
+            </section>
+
+            @* VALIDATION MESSAGES *@
+            @if (_validationErrors.Count > 0)
+            {
+                <div class="validation-summary-box">
+                    <span class="font-bold text-danger">Please correct the following errors before completing repair:</span>
+                    <ul>
+                        @foreach (var err in _validationErrors)
+                        {
+                            <li>@err</li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* STICKY BOTTOM ACTION BAR *@
+    <StickyActionBar CanPrevious="@(_currentChequeIndex > 0)"
+                    CanNext="@(_currentChequeIndex < _selectedBatch.Cheques.Count - 1)"
+                    IsProcessing="@_processing"
+                    OnPrevious="GoPrevious"
+                    OnNext="GoNext"
+                    OnSaveDraft="SaveDraft"
+                    OnComplete="PromptComplete"
+                    OnExit="PromptExit" />
+}
+
+@* CONFIRMATION MODALS *@
+<ConfirmActionModal IsOpen="@_showCompleteModal"
+                    Title="Complete Outward Repair"
+                    Message="@($"Are you sure you want to complete repair for Batch {_selectedBatch?.BatchId}? The batch will be routed to Outward Authorization.")"
+                    ConfirmLabel="Yes, Complete Repair"
+                    CancelLabel="Cancel"
+                    OnConfirm="ConfirmCompleteRepairAsync"
+                    OnCancel="() => _showCompleteModal = false">
+    @if (TotalBatchChangedCount == 0)
+    {
+        <div class="alert warning mt-2">
+            <strong>Warning:</strong> No field modifications were made. The batch will be resubmitted with its current values.
+        </div>
+    }
+</ConfirmActionModal>
+
+<ConfirmActionModal IsOpen="@_showExitModal"
+                    Title="Exit Batch Repair"
+                    Message="Are you sure you want to exit the repair workspace? Unsaved changes will be discarded."
+                    ConfirmLabel="Yes, Exit"
+                    CancelLabel="Stay on Page"
+                    IsDanger="true"
+                    OnConfirm="ConfirmExit"
+                    OnCancel="() => _showExitModal = false" />
+
+@* // Code Added by KK *@
+<style>
+    /* Contain Sticky Bottom Action Bar inside main workspace */
+    .sticky-action-bar {
+        position: fixed;
+        bottom: 0;
+        left: 260px; /* Offset for desktop left sidebar */
+        right: 0;
+        background-color: var(--surface-solid, #ffffff);
+        border-top: 1px solid var(--border, #e2e8f0);
+        box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05);
+        z-index: 50;
+        padding: 0.75rem 1.5rem;
+    }
+    @@media (max-width: 768px) {
+        .sticky-action-bar {
+            left: 0;
+        }
+    }
+
+    /* Dark Mode Overrides for Outward Repair */
+    html[data-theme="dark"] .sticky-action-bar {
+        background-color: #1C1C1E;
+        border-top-color: rgba(235, 235, 245, 0.15);
+        box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.3);
+    }
+    html[data-theme="dark"] .sticky-action-bar .secondary-button {
+        background-color: #242426;
+        border-color: rgba(235, 235, 245, 0.18);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .sticky-action-bar .secondary-button:hover:not(:disabled) {
+        background-color: #2C2C2E;
+    }
+    html[data-theme="dark"] .sticky-action-bar .primary-button {
+        background-color: #0A84FF;
+        border-color: #0A84FF;
+        color: #FFFFFF;
+    }
+
+    /* Stage 1 & Stage 2 Dark Theme Cards & Panels */
+    html[data-theme="dark"] .panel,
+    html[data-theme="dark"] .metric-card,
+    html[data-theme="dark"] .empty-state-card,
+    html[data-theme="dark"] .exception-banner,
+    html[data-theme="dark"] .changed-field-container,
+    html[data-theme="dark"] .image-viewer-panel,
+    html[data-theme="dark"] .image-viewer-footer,
+    html[data-theme="dark"] .image-viewer-toolbar {
+        background-color: #1C1C1E;
+        border-color: rgba(235, 235, 245, 0.15);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .panel-heading h2,
+    html[data-theme="dark"] .panel-heading .eyebrow,
+    html[data-theme="dark"] .metric-card span,
+    html[data-theme="dark"] .metric-card strong,
+    html[data-theme="dark"] .meta-field-grid dd,
+    html[data-theme="dark"] .summary-list dd,
+    html[data-theme="dark"] .changed-field-input label,
+    html[data-theme="dark"] .diff-value,
+    html[data-theme="dark"] .checkbox-field-label {
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .meta-field-grid dt,
+    html[data-theme="dark"] .summary-list dt,
+    html[data-theme="dark"] .diff-label {
+        color: #A1A1A6;
+    }
+    html[data-theme="dark"] .changed-field-input input,
+    html[data-theme="dark"] .changed-field-input select,
+    html[data-theme="dark"] .form-field textarea {
+        background-color: #141416;
+        border-color: rgba(235, 235, 245, 0.2);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .diff-card {
+        background-color: #242426;
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .changed-field-container.is-changed {
+        border-color: rgba(245, 158, 11, 0.5);
+        background-color: rgba(245, 158, 11, 0.08);
+    }
+    html[data-theme="dark"] .diff-card.diff-updated-active {
+        background-color: rgba(245, 158, 11, 0.18);
+        border-color: rgba(245, 158, 11, 0.4);
+    }
+    html[data-theme="dark"] .tab-btn,
+    html[data-theme="dark"] .tool-btn {
+        background-color: #242426;
+        border-color: rgba(235, 235, 245, 0.18);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .tab-btn.active {
+        background-color: #0A84FF;
+        border-color: #0A84FF;
+        color: #FFFFFF;
+    }
+    html[data-theme="dark"] .cts-table th {
+        background-color: #242426;
+        color: #A1A1A6;
+        border-bottom-color: rgba(235, 235, 245, 0.15);
+    }
+    html[data-theme="dark"] .cts-table td {
+        border-bottom-color: rgba(235, 235, 245, 0.08);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .interactive-row:hover td {
+        background-color: rgba(255, 255, 255, 0.06);
+    }
+    html[data-theme="dark"] .interactive-row.selected td {
+        background-color: rgba(10, 132, 255, 0.18) !important;
+    }
+    html[data-theme="dark"] .exception-banner {
+        background-color: rgba(245, 158, 11, 0.12);
+        border-color: rgba(245, 158, 11, 0.3);
+        color: #FBBF24;
+    }
+    html[data-theme="dark"] .summary-list div {
+        border-bottom-color: rgba(235, 235, 245, 0.08);
+    }
+</style>
+
+@code {
+    private bool _loading = true;
+    private bool _processing;
+    private bool _reviewMode;
+    private string? _error;
+    private string? _notice;
+    private string _repairNotes = string.Empty;
+
+    private List<BatchViewModel> _batches = new();
+    private BatchViewModel? _selectedBatch;
+    private ChequeEditModel? _activeCheque;
+    private int _currentChequeIndex;
+
+    private RepairFilterPanel.FilterModel _filter = new();
+    private List<string> _validationErrors = new();
+    private bool _showCompleteModal;
+    private bool _showExitModal;
+
+    private string OldestAge => _batches.Count > 0 ? "Today (1h 15m)" : "None";
+
+    private List<BatchViewModel> FilteredBatches => _batches.Where(b =>
+        (string.IsNullOrWhiteSpace(_filter.BatchId) || b.BatchId.Contains(_filter.BatchId, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filter.BranchCode) || b.BranchCode.Contains(_filter.BranchCode, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filter.ChequeNo) || b.Cheques.Any(c => c.ChequeNo.Contains(_filter.ChequeNo, StringComparison.OrdinalIgnoreCase))) &&
+        (string.IsNullOrWhiteSpace(_filter.MicrAccountNo) || b.Cheques.Any(c => c.MicrAccountNo.Contains(_filter.MicrAccountNo, StringComparison.OrdinalIgnoreCase))) &&
+        (string.IsNullOrWhiteSpace(_filter.RoutingNo) || b.Cheques.Any(c => c.RoutingNo.Contains(_filter.RoutingNo, StringComparison.OrdinalIgnoreCase))) &&
+        (string.IsNullOrWhiteSpace(_filter.CreditAccountNo) || b.Cheques.Any(c => c.CreditAccountNo.Contains(_filter.CreditAccountNo, StringComparison.OrdinalIgnoreCase))) &&
+        (string.IsNullOrWhiteSpace(_filter.Amount) || b.Cheques.Any(c => c.Amount.ToString().Contains(_filter.Amount))) &&
+        (string.IsNullOrWhiteSpace(_filter.EndorsementNumber) || b.Cheques.Any(c => c.ChequeId.Contains(_filter.EndorsementNumber, StringComparison.OrdinalIgnoreCase))) &&
+        (string.IsNullOrWhiteSpace(_filter.BatchType) || b.BatchType.Equals(_filter.BatchType, StringComparison.OrdinalIgnoreCase))
+    ).ToList();
+
+    private decimal CalculatedActiveAmount => _selectedBatch?.Cheques.Where(c => !c.IsDiscarded).Sum(c => c.Amount) ?? 0m;
+    private int TotalBatchChangedCount => _selectedBatch?.Cheques.Sum(GetChangedFieldsCount) ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadQueueAsync();
+    }
+
+    private async Task LoadQueueAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        var result = await Client.QueueAsync(new QueueRequestModel("OUTWARD_REPAIR", 1, 100));
+        if (result.IsSuccess && result.Data is not null)
+        {
+            BuildBatchesFromQueue(result.Data.Items);
+        }
+        else
+        {
+            BuildDemoBatches();
+        }
+
+        _loading = false;
+    }
+
+    private void BuildBatchesFromQueue(IReadOnlyList<ChequeSummaryModel> items)
+    {
+        _batches.Clear();
+        if (items.Count == 0)
+        {
+            BuildDemoBatches();
+            return;
+        }
+
+        var grouped = items.GroupBy(i => i.BatchNo);
+        foreach (var group in grouped)
+        {
+            var list = group.Select(item => new ChequeEditModel
+            {
+                ChequeId = item.ChequeId,
+                ChequeNo = item.ChequeNo,
+                OriginalChequeNo = item.ChequeNo,
+                MicrAccountNo = item.AccountNo,
+                OriginalMicrAccountNo = item.AccountNo,
+                CreditAccountNo = item.AccountNo,
+                RoutingNo = "100001",
+                OriginalRoutingNo = "100001",
+                ChequeType = "1",
+                OriginalChequeType = "1",
+                CheckDigit = "001",
+                OriginalCheckDigit = "001",
+                Amount = item.Amount,
+                OriginalAmount = item.Amount,
+                ChequeDate = DateOnly.FromDateTime(item.ValueDateUtc),
+                OriginalChequeDate = DateOnly.FromDateTime(item.ValueDateUtc),
+                DrawerName = "Drawer Account",
+                OriginalDrawerName = "Drawer Account",
+                Remarks = item.RejectReason ?? string.Empty,
+                OriginalRemarks = item.RejectReason ?? string.Empty,
+                Status = item.Status,
+                FrontImageUrl = "/placeholders/cheque-front.svg",
+                BackImageUrl = "/placeholders/cheque-back.svg",
+                SignatureImageUrl = "/placeholders/signature.svg"
+            }).ToList();
+
+            _batches.Add(new BatchViewModel
+            {
+                BatchId = group.Key,
+                BranchCode = group.First().BranchCode,
+                BatchType = "CDC",
+                Maker = "maker1",
+                ReturnedBy = "checker1",
+                ReturnedAt = DateTime.Now.AddHours(-1).ToString("dd MMM yyyy, HH:mm"),
+                RepairReason = group.First().RejectReason ?? "Cheque number or MICR account mismatch.",
+                Status = "Repair Required",
+                TotalAmount = list.Sum(c => c.Amount),
+                Cheques = list
+            });
+        }
+    }
+
+    private void BuildDemoBatches()
+    {
+        _batches = new List<BatchViewModel>
+        {
+            new BatchViewModel
+            {
+                BatchId = "OUT-0601-01",
+                BranchCode = "001",
+                BatchType = "CDC",
+                Maker = "maker1",
+                ReturnedBy = "checker1",
+                ReturnedAt = DateTime.Now.AddHours(-2).ToString("dd MMM yyyy, HH:mm"),
+                RepairReason = "Cheque #000123 MICR account number illegible; please verify and correct.",
+                Status = "Repair Required",
+                TotalAmount = 1500000m,
+                Cheques = new List<ChequeEditModel>
+                {
+                    new ChequeEditModel
+                    {
+                        ChequeId = "CHQ-001",
+                        ChequeNo = "000123",
+                        OriginalChequeNo = "000123",
+                        MicrAccountNo = "100234567",
+                        OriginalMicrAccountNo = "100234567",
+                        CreditAccountNo = "200987654",
+                        RoutingNo = "100001",
+                        OriginalRoutingNo = "100001",
+                        ChequeType = "1",
+                        OriginalChequeType = "1",
+                        CheckDigit = "001",
+                        OriginalCheckDigit = "001",
+                        Amount = 1000000m,
+                        OriginalAmount = 1000000m,
+                        ChequeDate = DateOnly.FromDateTime(DateTime.Today),
+                        OriginalChequeDate = DateOnly.FromDateTime(DateTime.Today),
+                        DrawerName = "U Kyaw Kyaw",
+                        OriginalDrawerName = "U Kyaw Kyaw",
+                        Remarks = "Verify MICR line",
+                        OriginalRemarks = "Verify MICR line",
+                        Status = "Repair Required",
+                        FrontImageUrl = "/placeholders/cheque-front.svg",
+                        BackImageUrl = "/placeholders/cheque-back.svg",
+                        SignatureImageUrl = "/placeholders/signature.svg"
+                    },
+                    new ChequeEditModel
+                    {
+                        ChequeId = "CHQ-002",
+                        ChequeNo = "000124",
+                        OriginalChequeNo = "000124",
+                        MicrAccountNo = "100234588",
+                        OriginalMicrAccountNo = "100234588",
+                        CreditAccountNo = "200987699",
+                        RoutingNo = "100001",
+                        OriginalRoutingNo = "100001",
+                        ChequeType = "1",
+                        OriginalChequeType = "1",
+                        CheckDigit = "001",
+                        OriginalCheckDigit = "001",
+                        Amount = 500000m,
+                        OriginalAmount = 500000m,
+                        ChequeDate = DateOnly.FromDateTime(DateTime.Today),
+                        OriginalChequeDate = DateOnly.FromDateTime(DateTime.Today),
+                        DrawerName = "Daw Hla Hla",
+                        OriginalDrawerName = "Daw Hla Hla",
+                        Remarks = "",
+                        OriginalRemarks = "",
+                        Status = "Repair Required",
+                        FrontImageUrl = "/placeholders/cheque-front.svg",
+                        BackImageUrl = "/placeholders/cheque-back.svg",
+                        SignatureImageUrl = "/placeholders/signature.svg"
+                    }
+                }
+            }
+        };
+    }
+
+    private void ApplyFilter() { }
+    private void ResetFilter() { }
+
+    private void OpenBatchDetail(BatchViewModel batch)
+    {
+        _selectedBatch = batch;
+        _currentChequeIndex = 0;
+        _activeCheque = batch.Cheques.FirstOrDefault();
+        _validationErrors.Clear();
+        _repairNotes = string.Empty;
+        _notice = null;
+        _error = null;
+        _reviewMode = true;
+    }
+
+    private void SelectCheque(int index)
+    {
+        if (_selectedBatch is null || index < 0 || index >= _selectedBatch.Cheques.Count) return;
+        _currentChequeIndex = index;
+        _activeCheque = _selectedBatch.Cheques[index];
+    }
+
+    private void GoPrevious()
+    {
+        if (_currentChequeIndex > 0) SelectCheque(_currentChequeIndex - 1);
+    }
+
+    private void GoNext()
+    {
+        if (_selectedBatch is not null && _currentChequeIndex < _selectedBatch.Cheques.Count - 1)
+        {
+            SelectCheque(_currentChequeIndex + 1);
+        }
+    }
+
+    private void OnChequeFieldModified()
+    {
+        ValidateCurrentBatch();
+    }
+
+    private int GetChangedFieldsCount(ChequeEditModel cheque)
+    {
+        var count = 0;
+        if (cheque.ChequeNo != cheque.OriginalChequeNo) count++;
+        if (cheque.MicrAccountNo != cheque.OriginalMicrAccountNo) count++;
+        if (cheque.RoutingNo != cheque.OriginalRoutingNo) count++;
+        if (cheque.ChequeType != cheque.OriginalChequeType) count++;
+        if (cheque.CheckDigit != cheque.OriginalCheckDigit) count++;
+        if (cheque.Amount != cheque.OriginalAmount) count++;
+        if (cheque.ChequeDate != cheque.OriginalChequeDate) count++;
+        if (cheque.DrawerName != cheque.OriginalDrawerName) count++;
+        if (cheque.Remarks != cheque.OriginalRemarks) count++;
+        if (cheque.IsDiscarded != cheque.OriginalIsDiscarded) count++;
+        return count;
+    }
+
+    private bool ValidateCurrentBatch()
+    {
+        _validationErrors.Clear();
+        if (_selectedBatch is null) return false;
+
+        foreach (var chk in _selectedBatch.Cheques)
+        {
+            if (string.IsNullOrWhiteSpace(chk.ChequeNo)) _validationErrors.Add($"Cheque [{chk.ChequeId}]: Cheque number cannot be blank.");
+            if (string.IsNullOrWhiteSpace(chk.MicrAccountNo)) _validationErrors.Add($"Cheque [{chk.ChequeNo}]: MICR account number cannot be blank.");
+            if (string.IsNullOrWhiteSpace(chk.RoutingNo)) _validationErrors.Add($"Cheque [{chk.ChequeNo}]: Routing number cannot be blank.");
+            if (chk.Amount <= 0) _validationErrors.Add($"Cheque [{chk.ChequeNo}]: Amount must be greater than zero.");
+            if (!chk.ChequeDate.HasValue) _validationErrors.Add($"Cheque [{chk.ChequeNo}]: Issue date is required.");
+        }
+
+        return _validationErrors.Count == 0;
+    }
+
+    private void SaveDraft()
+    {
+        _notice = $"Draft changes saved locally for Batch {_selectedBatch?.BatchId}.";
+    }
+
+    private void PromptComplete()
+    {
+        if (!ValidateCurrentBatch()) return;
+        _showCompleteModal = true;
+    }
+
+    private async Task ConfirmCompleteRepairAsync()
+    {
+        _showCompleteModal = false;
+        if (_selectedBatch is null) return;
+
+        _processing = true;
+        _error = null;
+
+        var firstChequeId = _selectedBatch.Cheques.FirstOrDefault()?.ChequeId ?? _selectedBatch.BatchId;
+        var result = await Client.ActionAsync(new QueueActionRequestModel(firstChequeId, "OUTWARD.REPAIR.RESUBMIT", _repairNotes));
+
+        _processing = false;
+
+        _notice = $"Batch {_selectedBatch.BatchId} repair completed successfully and routed to Outward Authorization.";
+        _reviewMode = false;
+        _batches.Remove(_selectedBatch);
+        _selectedBatch = null;
+        _activeCheque = null;
+    }
+
+    private void PromptExit()
+    {
+        if (TotalBatchChangedCount > 0)
+        {
+            _showExitModal = true;
+        }
+        else
+        {
+            ConfirmExit();
+        }
+    }
+
+    private void ConfirmExit()
+    {
+        _showExitModal = false;
+        _reviewMode = false;
+        _selectedBatch = null;
+        _activeCheque = null;
+    }
+
+    public sealed class BatchViewModel
+    {
+        public string BatchId { get; set; } = string.Empty;
+        public string BranchCode { get; set; } = string.Empty;
+        public string BatchType { get; set; } = "CDC";
+        public string Maker { get; set; } = string.Empty;
+        public string ReturnedBy { get; set; } = string.Empty;
+        public string ReturnedAt { get; set; } = string.Empty;
+        public string RepairReason { get; set; } = string.Empty;
+        public string Status { get; set; } = "Repair Required";
+        public decimal TotalAmount { get; set; }
+        public List<ChequeEditModel> Cheques { get; set; } = new();
+    }
+
+    public sealed class ChequeEditModel
+    {
+        public string ChequeId { get; set; } = string.Empty;
+        public string ChequeNo { get; set; } = string.Empty;
+        public string OriginalChequeNo { get; set; } = string.Empty;
+        public string MicrAccountNo { get; set; } = string.Empty;
+        public string OriginalMicrAccountNo { get; set; } = string.Empty;
+        public string CreditAccountNo { get; set; } = string.Empty;
+        public string RoutingNo { get; set; } = string.Empty;
+        public string OriginalRoutingNo { get; set; } = string.Empty;
+        public string ChequeType { get; set; } = "1";
+        public string OriginalChequeType { get; set; } = "1";
+        public string CheckDigit { get; set; } = "001";
+        public string OriginalCheckDigit { get; set; } = "001";
+        public decimal Amount { get; set; }
+        public decimal OriginalAmount { get; set; }
+        public DateOnly? ChequeDate { get; set; }
+        public DateOnly? OriginalChequeDate { get; set; }
+        public string DrawerName { get; set; } = string.Empty;
+        public string OriginalDrawerName { get; set; } = string.Empty;
+        public string Remarks { get; set; } = string.Empty;
+        public string OriginalRemarks { get; set; } = string.Empty;
+        public bool IsDiscarded { get; set; }
+        public bool OriginalIsDiscarded { get; set; }
+        public string Status { get; set; } = "Repair Required";
+        public string FrontImageUrl { get; set; } = "/placeholders/cheque-front.svg";
+        public string BackImageUrl { get; set; } = "/placeholders/cheque-back.svg";
+        public string SignatureImageUrl { get; set; } = "/placeholders/signature.svg";
+    }
+}

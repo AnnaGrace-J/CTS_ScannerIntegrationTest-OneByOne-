@@ -1,0 +1,20 @@
+@inject NavigationManager Navigation
+@using Microsoft.AspNetCore.Components.Authorization
+
+<div class="loading-panel">Redirecting to sign in...</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = AuthenticationState is null ? null : await AuthenticationState;
+        if (state?.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo("/access-denied");
+            return;
+        }
+        var returnUrl = Uri.EscapeDataString('/' + Navigation.ToBaseRelativePath(Navigation.Uri));
+        Navigation.NavigateTo($"/login?returnUrl={returnUrl}", forceLoad: true);
+    }
+}

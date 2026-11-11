@@ -1,0 +1,13 @@
+<span class="status-pill @Tone(Status)"><i></i>@Pretty(Status)</span>
+
+@code {
+    [Parameter] public string Status { get; set; } = "PENDING";
+    private static string Tone(string value) => value.ToUpperInvariant() switch
+    {
+        "COMPLETED" or "READY" or "CLEAR" or "ONLINE" or "APPROVED" => "success",
+        "EXCEPTION" or "FAILED" or "REJECTED" or "ATTENTION" => "danger",
+        "PENDING" or "REFERRED" or "RETURN_PENDING" or "OPEN" => "warning",
+        _ => "info"
+    };
+    private static string Pretty(string value) => System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(value.Replace('_', ' ').ToLowerInvariant());
+}

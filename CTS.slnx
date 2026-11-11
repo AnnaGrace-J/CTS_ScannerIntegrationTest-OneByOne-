@@ -1,0 +1,21 @@
+<Solution>
+  <Folder Name="/Config/">
+    <File Path="Config/appsettings.json" />
+    <File Path="Config/coverage-api.runsettings" />
+    <File Path="Config/coverage-app.runsettings" />
+    <File Path="Config/custom-settings-ace-local.example.json" />
+    <File Path="Config/custom-settings-ace-local.json" />
+    <File Path="Config/custom-settings-dev.json" />
+  </Folder>
+  <Folder Name="/Scripts/">
+    <File Path="scripts/Invoke-RbacCoverage.ps1" />
+  </Folder>
+  <Project Path="CTS.Api\CTS.Api.csproj" />
+  <Project Path="CTS.Api.Tests\CTS.Api.Tests.csproj" />
+  <Project Path="CTS.App.Tests\CTS.App.Tests.csproj" />
+  <Project Path="CTS.App\CTS.App.csproj" />
+  <Project Path="CTS.Database\CTS.Database.csproj" />
+  <Project Path="CTS.Domain\CTS.Domain.csproj" />
+  <Project Path="CTS.ScannerAgent\CTS.ScannerAgent.csproj" />
+  <Project Path="CTS.Shared\CTS.Shared.csproj" />
+</Solution>

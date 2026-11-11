@@ -1,0 +1,11 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": ""
+  },
+  "Jwt": {
+    "Key": ""
+  },
+  "CtsApi": {
+    "BaseUrl": "http://localhost:5263/api/"
+  }
+}

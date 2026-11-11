@@ -1,0 +1,715 @@
+@page "/outward/wait-for-return"
+@attribute [Authorize]
+@inject WorkspaceApiService Client
+
+<PageTitle>Wait for Return · ACE CTS</PageTitle>
+
+@if (!_reviewMode)
+{
+    @* STAGE 1: RETURN WINDOW QUEUE & OPERATIONS CONSOLE *@
+    <PageHeader Section="Outward Clearing" Title="Wait for Return" Subtitle="Monitor clearing return window and record return advice." Badge="@($"{FilteredCheques.Count} Instruments")">
+        <button type="button" class="secondary-button" disabled="@_loading" @onclick="LoadQueueAsync">↻ Refresh</button>
+    </PageHeader>
+
+    @if (_loading)
+    {
+        <LoadingState />
+    }
+    else
+    {
+        <section class="workflow-summary" aria-label="Return queue summary">
+            <article class="metric-card">
+                <span>Waiting Instruments</span>
+                <strong class="@(FilteredCheques.Count > 0 ? "tone-warning" : "tone-success")">@FilteredCheques.Count.ToString("N0")</strong>
+                <small>Pending return window</small>
+            </article>
+            <article class="metric-card">
+                <span>Total Exposure Amount</span>
+                <strong class="tone-success">MMK @FilteredCheques.Sum(c => c.Amount).ToString("N2")</strong>
+                <small>Visible queue amount</small>
+            </article>
+            <article class="metric-card">
+                <span>Clearing Cutoff</span>
+                <strong class="@CutoffToneClass">@CutoffTimeLabel</strong>
+                <small>@CutoffHint</small>
+            </article>
+            <article class="metric-card">
+                <span>Oldest In-Flight Age</span>
+                <strong class="tone-warning">@OldestWaitAge</strong>
+                <small>Window elapsed SLA</small>
+            </article>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(_notice))
+        {
+            <div class="alert" role="status"><strong>Completed</strong><span>@_notice</span></div>
+        }
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert danger" role="alert"><strong>Error</strong><span>@_error</span></div>
+        }
+
+        <section class="service-console-panel">
+            <div class="service-console-header">
+                <div>
+                    <span class="eyebrow">CLEARING SERVICE CONSOLE</span>
+                    <h3>CBM Return Download & Clearing Simulation</h3>
+                </div>
+                <div class="service-console-actions">
+                    <button type="button" class="primary-button" disabled="@(_processing || FilteredCheques.Count == 0)" @onclick="() => PromptBulkSimulation(true)">
+                        ⬇ Simulate Return Download: Accepted (Credit Posting)
+                    </button>
+                    <button type="button" class="secondary-button" disabled="@(_processing || FilteredCheques.Count == 0)" @onclick="() => PromptBulkSimulation(false)">
+                        ↺ Simulate Return Download: Rejected (Work Exit)
+                    </button>
+                </div>
+            </div>
+            <span class="service-console-hint">
+                In CBM CTS clearing, cheques with no return file received before the session cutoff are deemed cleared and move automatically to <strong>Credit Posting</strong>. Returned cheques move to <strong>Work Exit</strong> with standardized return memos.
+            </span>
+        </section>
+
+        <ReturnFilterPanel Model="@_filter" ResultCount="@FilteredCheques.Count" OnApply="ApplyFilter" OnReset="ResetFilter" />
+
+        <section class="panel queue-table-panel">
+            <div class="panel-heading">
+                <div>
+                    <span class="eyebrow">WORK QUEUE</span>
+                    <h2>Waiting For Return Status</h2>
+                </div>
+                <span class="result-count">@FilteredCheques.Count instrument(s)</span>
+            </div>
+
+            @if (FilteredCheques.Count == 0)
+            {
+                <div class="empty-state-card">
+                    <p>No outward cheques currently awaiting return status.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="cts-table">
+                        <thead>
+                            <tr>
+                                <th>Cheque Number</th>
+                                <th>Amount</th>
+                                <th>ICL File</th>
+                                <th>Return Wait Status</th>
+                                <th class="text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var cheque in FilteredCheques)
+                            {
+                                <tr class="interactive-row @(cheque.ChequeId == _selectedCheque?.ChequeId ? "selected" : null)" @onclick="() => OpenChequeDetail(cheque)">
+                                    <td class="font-bold">@cheque.ChequeNo</td>
+                                    <td class="font-bold tone-success">MMK @cheque.Amount.ToString("N2")</td>
+                                    <td><code>@cheque.IclFileId</code></td>
+                                    <td><StatusPill Status="@cheque.ReturnStatus" /></td>
+                                    <td class="text-right">
+                                        <button type="button" class="primary-button-sm" @onclick="() => OpenChequeDetail(cheque)" @onclick:stopPropagation>
+                                            Inspect / Review
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+}
+else if (_selectedCheque is not null)
+{
+    @* STAGE 2: CHEQUE RETURN DETAIL WORKSPACE *@
+    <PageHeader Section="Outward Clearing / Wait for Return"
+                Title="@($"Cheque Return Review {_selectedCheque.ChequeNo}")"
+                Subtitle="Inspect instrument and verify clearing house return status."
+                Badge="@($"Item {_currentChequeIndex + 1} of {FilteredCheques.Count}")">
+        <button type="button" class="secondary-button" @onclick="PromptExit">‹ Back to Queue</button>
+    </PageHeader>
+
+    <div class="exception-banner">
+        <span class="banner-icon" aria-hidden="true">⏱️</span>
+        <div class="banner-content">
+            <strong>Clearing Window: Session 1 (Cutoff 14:00 MMT) · Awaiting Return Advice</strong>
+            <p>Presented in batch <strong>@_selectedCheque.BatchId</strong> via ICL file <strong>@_selectedCheque.IclFileId</strong>. Drawee Bank: <strong>@_selectedCheque.DraweeBank</strong>.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_notice))
+    {
+        <div class="alert" role="status"><strong>Notice</strong><span>@_notice</span></div>
+    }
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert danger" role="alert"><strong>Error</strong><span>@_error</span></div>
+    }
+
+    <div class="repair-workspace-grid">
+        @* LEFT COLUMN: CHEQUE IMAGE VIEWER & INSTRUMENT SELECTOR *@
+        <div class="repair-visual-col">
+            <ChequeImageViewer FrontSrc="@_selectedCheque.FrontImageUrl"
+                               RearSrc="@_selectedCheque.BackImageUrl"
+                               SignatureSrc="@_selectedCheque.SignatureImageUrl"
+                               Reference="@($"Cheque {_selectedCheque.ChequeNo} / {_selectedCheque.ChequeId}")"
+                               Status="@_selectedCheque.ReturnStatus"
+                               ChangedCount="0" />
+
+            <section class="panel instrument-list-panel">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">SESSION INSTRUMENTS</span>
+                        <h2>In-Flight Instruments</h2>
+                    </div>
+                    <span class="result-count">@FilteredCheques.Count cheque(s)</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="cts-table mini-table">
+                        <thead>
+                            <tr>
+                                <th>Cheque No</th>
+                                <th>Drawee Bank</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < FilteredCheques.Count; i++)
+                            {
+                                var idx = i;
+                                var chk = FilteredCheques[idx];
+                                var isSel = chk.ChequeId == _selectedCheque.ChequeId;
+                                <tr class="interactive-row @(isSel ? "selected" : null)" @onclick="() => SelectCheque(idx)">
+                                    <td class="font-bold">@chk.ChequeNo</td>
+                                    <td>@chk.DraweeBank</td>
+                                    <td>MMK @chk.Amount.ToString("N2")</td>
+                                    <td><StatusPill Status="@chk.ReturnStatus" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        @* RIGHT COLUMN: AUDIT METADATA & CLEARING DECISION *@
+        <div class="repair-forms-col">
+            @* PANEL 1: PRESENTMENT AUDIT CONTEXT *@
+            <section class="panel form-panel">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">PRESENTMENT AUDIT CONTEXT</span>
+                        <h2>Cheque Presentment Details</h2>
+                    </div>
+                </div>
+                <dl class="meta-field-grid">
+                    <div>
+                        <dt>Cheque Number</dt>
+                        <dd class="font-bold">@_selectedCheque.ChequeNo</dd>
+                    </div>
+                    <div>
+                        <dt>MICR Account</dt>
+                        <dd><code>@_selectedCheque.MicrAccountNo</code></dd>
+                    </div>
+                    <div>
+                        <dt>Credit Account</dt>
+                        <dd><code>@_selectedCheque.CreditAccountNo</code></dd>
+                    </div>
+                    <div>
+                        <dt>Drawee Bank</dt>
+                        <dd>@_selectedCheque.DraweeBank (@_selectedCheque.RoutingNo)</dd>
+                    </div>
+                    <div>
+                        <dt>Presenting Branch</dt>
+                        <dd>@_selectedCheque.BranchCode - @_selectedCheque.BranchName</dd>
+                    </div>
+                    <div>
+                        <dt>Presentment Time</dt>
+                        <dd>@_selectedCheque.PresentmentTime</dd>
+                    </div>
+                    <div>
+                        <dt>Presentment ICL File</dt>
+                        <dd><code>@_selectedCheque.IclFileId</code></dd>
+                    </div>
+                    <div>
+                        <dt>Cheque Amount</dt>
+                        <dd class="font-bold tone-success">MMK @_selectedCheque.Amount.ToString("N2")</dd>
+                    </div>
+                </dl>
+            </section>
+
+            @* PANEL 2: CLEARING RETURN DECISION *@
+            <section class="panel form-panel">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">CLEARING RESOLUTION</span>
+                        <h2>Return Window Decision</h2>
+                    </div>
+                </div>
+
+                <div class="decision-card-group">
+                    <label class="decision-card @(_decision == ReturnDecisionType.DeemedAccepted ? "selected-accept" : null)">
+                        <div class="decision-card-header">
+                            <input type="radio" name="decisionGroup" checked="@(_decision == ReturnDecisionType.DeemedAccepted)" @onchange="() => SetDecision(ReturnDecisionType.DeemedAccepted)" />
+                            <span>No Return (Deemed Accepted)</span>
+                        </div>
+                        <p>No inward return advice was received by cutoff. Funds will be released to Credit Posting.</p>
+                    </label>
+
+                    <label class="decision-card @(_decision == ReturnDecisionType.ReturnReceived ? "selected-return" : null)">
+                        <div class="decision-card-header">
+                            <input type="radio" name="decisionGroup" checked="@(_decision == ReturnDecisionType.ReturnReceived)" @onchange="() => SetDecision(ReturnDecisionType.ReturnReceived)" />
+                            <span>Return Received (Dishonored)</span>
+                        </div>
+                        <p>Inward return received from CBM. Stop credit posting and route to Work Exit.</p>
+                    </label>
+                </div>
+
+                @if (_decision == ReturnDecisionType.ReturnReceived)
+                {
+                    <div class="form-fields-stack">
+                        <div class="filter-item">
+                            <label for="ret-reason">Return Reason Code *</label>
+                            <select id="ret-reason" @bind="_returnReasonCode">
+                                <option value="01">01 · Insufficient Funds (Refer to Drawer)</option>
+                                <option value="02">02 · Payment Stopped by Drawer</option>
+                                <option value="03">03 · Drawer's Signature Differs / Irregular</option>
+                                <option value="04">04 · Account Closed / Frozen / Dormant</option>
+                                <option value="05">05 · Cheque Post-Dated / Stale</option>
+                                <option value="06">06 · Amount in Words and Figures Differ</option>
+                                <option value="07">07 · Cheque Mutilated / MICR Illegible</option>
+                                <option value="08">08 · Endorsement Irregular / Required</option>
+                            </select>
+                        </div>
+
+                        <div class="filter-item">
+                            <label for="ret-advice-ref">Drawee Bank Advice Reference</label>
+                            <input id="ret-advice-ref" @bind="_returnAdviceRef" placeholder="e.g. RET-CBM-0911-002" />
+                        </div>
+
+                        <div class="filter-item">
+                            <label for="ret-remarks">Return Memo / Remarks</label>
+                            <input id="ret-remarks" @bind="_returnRemarks" placeholder="Additional notes for customer return memo..." />
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="summary-list">
+                        <div>
+                            <dt>Resolution Action</dt>
+                            <dd class="font-bold tone-success">Release to Outward Credit Posting</dd>
+                        </div>
+                        <div>
+                            <dt>Beneficiary Posting Account</dt>
+                            <dd><code>@_selectedCheque.CreditAccountNo</code></dd>
+                        </div>
+                        <div>
+                            <dt>Value Date Status</dt>
+                            <dd>Same-Day Value Posting Eligible</dd>
+                        </div>
+                    </div>
+                }
+            </section>
+
+            @* VALIDATION MESSAGES *@
+            @if (_validationErrors.Count > 0)
+            {
+                <div class="validation-summary-box">
+                    <span class="font-bold text-danger">Please resolve the following issues:</span>
+                    <ul>
+                        @foreach (var err in _validationErrors)
+                        {
+                            <li>@err</li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* STICKY ACTION BAR *@
+    <StickyActionBar CanPrevious="@(_currentChequeIndex > 0)"
+                    CanNext="@(_currentChequeIndex < FilteredCheques.Count - 1)"
+                    IsProcessing="@_processing"
+                    CompleteLabel="@(_decision == ReturnDecisionType.ReturnReceived ? "Confirm Return (Reject)" : "Confirm Deemed Accepted")"
+                    OnPrevious="GoPrevious"
+                    OnNext="GoNext"
+                    OnSaveDraft="SaveDraft"
+                    OnComplete="PromptComplete"
+                    OnExit="PromptExit" />
+}
+
+@* CONFIRMATION MODALS *@
+<ConfirmActionModal IsOpen="@_showCompleteModal"
+                    Title="@(_decision == ReturnDecisionType.ReturnReceived ? "Confirm Cheque Return (Dishonored)" : "Confirm Cheque Clearance (Accepted)")"
+                    Message="@($"Are you sure you want to process Cheque {_selectedCheque?.ChequeNo} as {(_decision == ReturnDecisionType.ReturnReceived ? "Returned (Dishonored)" : "Deemed Accepted")}?")"
+                    ConfirmLabel="@(_decision == ReturnDecisionType.ReturnReceived ? "Yes, Return Cheque" : "Yes, Release to Credit Posting")"
+                    CancelLabel="Cancel"
+                    IsDanger="@(_decision == ReturnDecisionType.ReturnReceived)"
+                    OnConfirm="ConfirmProcessChequeAsync"
+                    OnCancel="() => _showCompleteModal = false">
+    @if (_decision == ReturnDecisionType.ReturnReceived)
+    {
+        <div class="alert danger mt-2">
+            <strong>Warning:</strong> Cheque will be removed from clearing and routed to Work Exit with Return Reason <code>@_returnReasonCode</code>.
+        </div>
+    }
+    else
+    {
+        <div class="alert warning mt-2">
+            <strong>Notice:</strong> Cheque will be marked Deemed Accepted and sent to Outward Credit Posting.
+        </div>
+    }
+</ConfirmActionModal>
+
+<ConfirmActionModal IsOpen="@_showBulkSimulationModal"
+                    Title="@(_bulkSimulateAccepted ? "Simulate Return Download: All Accepted" : "Simulate Return Download: All Rejected")"
+                    Message="@($"Are you sure you want to simulate CBM return download for {FilteredCheques.Count} waiting cheque(s)?")"
+                    ConfirmLabel="@(_bulkSimulateAccepted ? "Confirm Accepted (Credit Posting)" : "Confirm Rejected (Work Exit)")"
+                    CancelLabel="Cancel"
+                    IsDanger="@(!_bulkSimulateAccepted)"
+                    OnConfirm="ConfirmBulkSimulationAsync"
+                    OnCancel="() => _showBulkSimulationModal = false" />
+
+<ConfirmActionModal IsOpen="@_showExitModal"
+                    Title="Exit Return Review"
+                    Message="Are you sure you want to exit the review workspace? Unsaved changes will be discarded."
+                    ConfirmLabel="Yes, Exit"
+                    CancelLabel="Stay on Page"
+                    IsDanger="true"
+                    OnConfirm="ConfirmExit"
+                    OnCancel="() => _showExitModal = false" />
+
+@code {
+    public enum ReturnDecisionType
+    {
+        DeemedAccepted,
+        ReturnReceived
+    }
+
+    private bool _loading = true;
+    private bool _processing;
+    private bool _reviewMode;
+    private string? _error;
+    private string? _notice;
+
+    private List<WaitForReturnChequeModel> _cheques = new();
+    private WaitForReturnChequeModel? _selectedCheque;
+    private int _currentChequeIndex;
+
+    private ReturnFilterPanel.FilterModel _filter = new();
+    private List<string> _validationErrors = new();
+    private bool _showCompleteModal;
+    private bool _showBulkSimulationModal;
+    private bool _bulkSimulateAccepted = true;
+    private bool _showExitModal;
+
+    private ReturnDecisionType _decision = ReturnDecisionType.DeemedAccepted;
+    private string _returnReasonCode = "01";
+    private string _returnAdviceRef = string.Empty;
+    private string _returnRemarks = string.Empty;
+
+    private string CutoffTimeLabel => "14:00 MMT (Session 1)";
+    private string CutoffHint => "Window closes in 45m";
+    private string CutoffToneClass => "tone-warning";
+    private string OldestWaitAge => _cheques.Count > 0 ? "2h 15m" : "None";
+
+    private List<WaitForReturnChequeModel> FilteredCheques => _cheques.Where(c =>
+        (string.IsNullOrWhiteSpace(_filter.ChequeNo) || c.ChequeNo.Contains(_filter.ChequeNo, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filter.BatchId) || c.BatchId.Contains(_filter.BatchId, StringComparison.OrdinalIgnoreCase) || c.IclFileId.Contains(_filter.BatchId, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filter.AccountNo) || c.CreditAccountNo.Contains(_filter.AccountNo, StringComparison.OrdinalIgnoreCase) || c.MicrAccountNo.Contains(_filter.AccountNo, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filter.DraweeBank) || c.DraweeBank.Contains(_filter.DraweeBank, StringComparison.OrdinalIgnoreCase) || c.RoutingNo.Contains(_filter.DraweeBank, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filter.BranchCode) || c.BranchCode.Contains(_filter.BranchCode, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filter.Amount) || c.Amount.ToString().Contains(_filter.Amount)) &&
+        (string.IsNullOrWhiteSpace(_filter.ReturnStatus) || c.ReturnStatus.Equals(_filter.ReturnStatus, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filter.Currency) || c.Currency.Equals(_filter.Currency, StringComparison.OrdinalIgnoreCase))
+    ).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadQueueAsync();
+    }
+
+    private async Task LoadQueueAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        var result = await Client.QueueAsync(new QueueRequestModel("WAIT_FOR_RETURN", 1, 100));
+        if (result.IsSuccess && result.Data is not null && result.Data.Items.Count > 0)
+        {
+            BuildChequesFromQueue(result.Data.Items);
+        }
+        else
+        {
+            BuildDemoCheques();
+        }
+
+        _loading = false;
+    }
+
+    private void BuildChequesFromQueue(IReadOnlyList<ChequeSummaryModel> items)
+    {
+        _cheques.Clear();
+        var index = 1;
+        foreach (var item in items)
+        {
+            _cheques.Add(new WaitForReturnChequeModel
+            {
+                ChequeId = item.ChequeId,
+                ChequeNo = item.ChequeNo,
+                BatchId = item.BatchNo,
+                IclFileId = $"ICL-OW-{DateTime.Today:yyyyMMdd}-001",
+                MicrAccountNo = item.AccountNo,
+                CreditAccountNo = item.AccountNo,
+                RoutingNo = "100001",
+                DraweeBank = "KBZ Bank",
+                BranchCode = item.BranchCode,
+                BranchName = item.BranchName,
+                Amount = item.Amount,
+                Currency = item.Currency,
+                ReturnStatus = "Pending",
+                PresentmentTime = item.UpdatedAtUtc.ToLocalTime().ToString("dd MMM yyyy, HH:mm"),
+                ElapsedAge = $"{index * 25}m",
+                FrontImageUrl = "/placeholders/cheque-front.svg",
+                BackImageUrl = "/placeholders/cheque-back.svg",
+                SignatureImageUrl = "/placeholders/signature.svg"
+            });
+            index++;
+        }
+    }
+
+    private void BuildDemoCheques()
+    {
+        var now = DateTime.Now;
+        _cheques = new List<WaitForReturnChequeModel>
+        {
+            new()
+            {
+                ChequeId = "CHQ-OW-WAIT-001",
+                ChequeNo = "100006",
+                BatchId = "OB-20260812-005",
+                IclFileId = "ICL-OW-20260812-001",
+                MicrAccountNo = "0101001006",
+                CreditAccountNo = "2009871101",
+                RoutingNo = "100001",
+                DraweeBank = "KBZ Bank",
+                BranchCode = "HO",
+                BranchName = "Head Office",
+                Amount = 8750000m,
+                Currency = "MMK",
+                ReturnStatus = "Pending",
+                PresentmentTime = now.AddHours(-2).ToString("dd MMM yyyy, 10:30"),
+                ElapsedAge = "2h 15m",
+                FrontImageUrl = "/placeholders/cheque-front.svg",
+                BackImageUrl = "/placeholders/cheque-back.svg",
+                SignatureImageUrl = "/placeholders/signature.svg"
+            },
+            new()
+            {
+                ChequeId = "CHQ-OW-WAIT-002",
+                ChequeNo = "100007",
+                BatchId = "OB-20260812-005",
+                IclFileId = "ICL-OW-20260812-001",
+                MicrAccountNo = "0202002007",
+                CreditAccountNo = "2009871102",
+                RoutingNo = "100002",
+                DraweeBank = "CB Bank",
+                BranchCode = "001",
+                BranchName = "Kyauktada Branch",
+                Amount = 14200000m,
+                Currency = "MMK",
+                ReturnStatus = "Pending",
+                PresentmentTime = now.AddHours(-2).ToString("dd MMM yyyy, 10:32"),
+                ElapsedAge = "2h 13m",
+                FrontImageUrl = "/placeholders/cheque-front.svg",
+                BackImageUrl = "/placeholders/cheque-back.svg",
+                SignatureImageUrl = "/placeholders/signature.svg"
+            },
+            new()
+            {
+                ChequeId = "CHQ-OW-WAIT-003",
+                ChequeNo = "100008",
+                BatchId = "OB-20260812-006",
+                IclFileId = "ICL-OW-20260812-002",
+                MicrAccountNo = "0303003008",
+                CreditAccountNo = "2009871103",
+                RoutingNo = "100003",
+                DraweeBank = "AYA Bank",
+                BranchCode = "002",
+                BranchName = "Kamayut Branch",
+                Amount = 5600000m,
+                Currency = "MMK",
+                ReturnStatus = "Pending",
+                PresentmentTime = now.AddHours(-1).ToString("dd MMM yyyy, 11:15"),
+                ElapsedAge = "1h 30m",
+                FrontImageUrl = "/placeholders/cheque-front.svg",
+                BackImageUrl = "/placeholders/cheque-back.svg",
+                SignatureImageUrl = "/placeholders/signature.svg"
+            }
+        };
+    }
+
+    private void ApplyFilter()
+    {
+        StateHasChanged();
+    }
+
+    private void ResetFilter()
+    {
+        _filter.Clear();
+        StateHasChanged();
+    }
+
+    private void OpenChequeDetail(WaitForReturnChequeModel cheque)
+    {
+        _selectedCheque = cheque;
+        _currentChequeIndex = FilteredCheques.IndexOf(cheque);
+        if (_currentChequeIndex < 0) _currentChequeIndex = 0;
+        _decision = ReturnDecisionType.DeemedAccepted;
+        _returnReasonCode = "01";
+        _returnAdviceRef = string.Empty;
+        _returnRemarks = string.Empty;
+        _validationErrors.Clear();
+        _notice = null;
+        _error = null;
+        _reviewMode = true;
+    }
+
+    private void SelectCheque(int index)
+    {
+        if (index < 0 || index >= FilteredCheques.Count) return;
+        _currentChequeIndex = index;
+        _selectedCheque = FilteredCheques[index];
+        _decision = ReturnDecisionType.DeemedAccepted;
+        _validationErrors.Clear();
+    }
+
+    private void GoPrevious()
+    {
+        if (_currentChequeIndex > 0) SelectCheque(_currentChequeIndex - 1);
+    }
+
+    private void GoNext()
+    {
+        if (_currentChequeIndex < FilteredCheques.Count - 1) SelectCheque(_currentChequeIndex + 1);
+    }
+
+    private void SetDecision(ReturnDecisionType decision)
+    {
+        _decision = decision;
+        _validationErrors.Clear();
+    }
+
+    private void SaveDraft()
+    {
+        _notice = $"Decision state draft saved locally for Cheque {_selectedCheque?.ChequeNo}.";
+    }
+
+    private void PromptComplete()
+    {
+        _validationErrors.Clear();
+        if (_decision == ReturnDecisionType.ReturnReceived && string.IsNullOrWhiteSpace(_returnReasonCode))
+        {
+            _validationErrors.Add("Return reason code must be specified when recording a return.");
+            return;
+        }
+
+        _showCompleteModal = true;
+    }
+
+    private async Task ConfirmProcessChequeAsync()
+    {
+        _showCompleteModal = false;
+        if (_selectedCheque is null) return;
+
+        _processing = true;
+        _error = null;
+
+        var actionCode = _decision == ReturnDecisionType.ReturnReceived ? "RETURN_RECEIVED" : "NO_RETURN";
+        var note = _decision == ReturnDecisionType.ReturnReceived
+            ? $"Return code {_returnReasonCode}: {_returnRemarks} (Ref: {_returnAdviceRef})"
+            : "No return received before cutoff. Deemed accepted.";
+
+        var result = await Client.ActionAsync(new QueueActionRequestModel(_selectedCheque.ChequeId, actionCode, note));
+
+        _processing = false;
+
+        var outcomeMsg = _decision == ReturnDecisionType.ReturnReceived
+            ? $"Cheque {_selectedCheque.ChequeNo} marked as Returned (Dishonored) and routed to Work Exit."
+            : $"Cheque {_selectedCheque.ChequeNo} marked as Deemed Accepted and routed to Credit Posting.";
+
+        _notice = outcomeMsg;
+        _cheques.Remove(_selectedCheque);
+        _reviewMode = false;
+        _selectedCheque = null;
+    }
+
+    private void PromptBulkSimulation(bool accepted)
+    {
+        _bulkSimulateAccepted = accepted;
+        _showBulkSimulationModal = true;
+    }
+
+    private async Task ConfirmBulkSimulationAsync()
+    {
+        _showBulkSimulationModal = false;
+        _processing = true;
+        _error = null;
+
+        var actionCode = _bulkSimulateAccepted ? "NO_RETURN" : "RETURN_RECEIVED";
+        var note = _bulkSimulateAccepted
+            ? "Simulated CBM Return Download: No Return / Deemed Accepted."
+            : "Simulated CBM Return Download: Return Received / Dishonored.";
+
+        var count = FilteredCheques.Count;
+        foreach (var chk in FilteredCheques.ToList())
+        {
+            await Client.ActionAsync(new QueueActionRequestModel(chk.ChequeId, actionCode, note));
+            _cheques.Remove(chk);
+        }
+
+        _processing = false;
+        _notice = _bulkSimulateAccepted
+            ? $"Bulk simulation completed: {count} cheque(s) marked Accepted and moved to Outward Credit Posting."
+            : $"Bulk simulation completed: {count} cheque(s) marked Rejected and moved to Work Exit.";
+    }
+
+    private void PromptExit()
+    {
+        _showExitModal = true;
+    }
+
+    private void ConfirmExit()
+    {
+        _showExitModal = false;
+        _reviewMode = false;
+        _selectedCheque = null;
+    }
+
+    public sealed class WaitForReturnChequeModel
+    {
+        public string ChequeId { get; set; } = string.Empty;
+        public string ChequeNo { get; set; } = string.Empty;
+        public string BatchId { get; set; } = string.Empty;
+        public string IclFileId { get; set; } = string.Empty;
+        public string MicrAccountNo { get; set; } = string.Empty;
+        public string CreditAccountNo { get; set; } = string.Empty;
+        public string RoutingNo { get; set; } = string.Empty;
+        public string DraweeBank { get; set; } = string.Empty;
+        public string BranchCode { get; set; } = string.Empty;
+        public string BranchName { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string Currency { get; set; } = "MMK";
+        public string ReturnStatus { get; set; } = "Pending";
+        public string PresentmentTime { get; set; } = string.Empty;
+        public string ElapsedAge { get; set; } = string.Empty;
+        public string FrontImageUrl { get; set; } = "/placeholders/cheque-front.svg";
+        public string BackImageUrl { get; set; } = "/placeholders/cheque-back.svg";
+        public string SignatureImageUrl { get; set; } = "/placeholders/signature.svg";
+    }
+}

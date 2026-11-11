@@ -1,0 +1,109 @@
+<section class="panel filter-panel">
+    <div class="panel-heading">
+        <div>
+            <span class="eyebrow">QUERY CRITERIA</span>
+            <h2>Repair Queue Filters</h2>
+        </div>
+        <div class="filter-header-actions">
+            <span class="result-count">@ResultCount result(s)</span>
+            <button type="button" class="secondary-button" @onclick="HandleReset">Reset Filters</button>
+            <button type="button" class="primary-button" @onclick="HandleApply">Apply Filters</button>
+        </div>
+    </div>
+
+    <div class="filter-grid-11">
+        <div class="filter-item">
+            <label for="f-batch-id">Batch ID</label>
+            <input id="f-batch-id" @bind="Model.BatchId" placeholder="e.g. OUT-0601-01" />
+        </div>
+        <div class="filter-item">
+            <label for="f-branch-code">Branch Code</label>
+            <input id="f-branch-code" @bind="Model.BranchCode" placeholder="e.g. 001" />
+        </div>
+        <div class="filter-item">
+            <label for="f-cheque-no">Cheque No.</label>
+            <input id="f-cheque-no" @bind="Model.ChequeNo" placeholder="e.g. 000123" />
+        </div>
+        <div class="filter-item">
+            <label for="f-micr-acc">MICR Account No.</label>
+            <input id="f-micr-acc" @bind="Model.MicrAccountNo" placeholder="e.g. 100234567" />
+        </div>
+        <div class="filter-item">
+            <label for="f-routing-no">Routing No.</label>
+            <input id="f-routing-no" @bind="Model.RoutingNo" placeholder="e.g. 100001" />
+        </div>
+        <div class="filter-item">
+            <label for="f-credit-acc">Credit Account No.</label>
+            <input id="f-credit-acc" @bind="Model.CreditAccountNo" placeholder="e.g. 200987654" />
+        </div>
+        <div class="filter-item">
+            <label for="f-amount">Amount</label>
+            <input id="f-amount" inputmode="decimal" @bind="Model.Amount" placeholder="e.g. 500000" />
+        </div>
+        <div class="filter-item">
+            <label for="f-endorsement">Endorsement Number</label>
+            <input id="f-endorsement" @bind="Model.EndorsementNumber" placeholder="e.g. UIC-..." />
+        </div>
+        <div class="filter-item">
+            <label for="f-batch-type">Batch Type</label>
+            <select id="f-batch-type" @bind="Model.BatchType">
+                <option value="">All Types</option>
+                <option value="CDC">CDC · Normal Cheque</option>
+                <option value="PO">PO · Payment Order</option>
+                <option value="GOV">GOV · Government Cheque</option>
+            </select>
+        </div>
+        <div class="filter-item">
+            <label for="f-value-date">Value Date</label>
+            <input id="f-value-date" type="date" @bind="Model.ValueDate" />
+        </div>
+        <div class="filter-item">
+            <label for="f-scan-date">Scan Date</label>
+            <input id="f-scan-date" type="date" @bind="Model.ScanDate" />
+        </div>
+    </div>
+</section>
+
+@code {
+    public class FilterModel
+    {
+        public string BatchId { get; set; } = string.Empty;
+        public string BranchCode { get; set; } = string.Empty;
+        public string ChequeNo { get; set; } = string.Empty;
+        public string MicrAccountNo { get; set; } = string.Empty;
+        public string RoutingNo { get; set; } = string.Empty;
+        public string CreditAccountNo { get; set; } = string.Empty;
+        public string Amount { get; set; } = string.Empty;
+        public string EndorsementNumber { get; set; } = string.Empty;
+        public string BatchType { get; set; } = string.Empty;
+        public DateOnly? ValueDate { get; set; }
+        public DateOnly? ScanDate { get; set; }
+
+        public void Clear()
+        {
+            BatchId = string.Empty;
+            BranchCode = string.Empty;
+            ChequeNo = string.Empty;
+            MicrAccountNo = string.Empty;
+            RoutingNo = string.Empty;
+            CreditAccountNo = string.Empty;
+            Amount = string.Empty;
+            EndorsementNumber = string.Empty;
+            BatchType = string.Empty;
+            ValueDate = null;
+            ScanDate = null;
+        }
+    }
+
+    [Parameter] public FilterModel Model { get; set; } = new();
+    [Parameter] public int ResultCount { get; set; }
+    [Parameter] public EventCallback OnApply { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+
+    private async Task HandleApply() => await OnApply.InvokeAsync();
+    private async Task HandleReset()
+    {
+        Model.Clear();
+        await OnReset.InvokeAsync();
+    }
+}

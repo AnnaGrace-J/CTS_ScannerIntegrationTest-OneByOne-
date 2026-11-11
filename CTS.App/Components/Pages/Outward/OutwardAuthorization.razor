@@ -1,0 +1,1945 @@
+@page "/outward/authorization"
+@attribute [Authorize]
+@inject WorkspaceApiService Client
+@inject NavigationManager Navigation
+
+@*
+// Origin Code:
+// @page "/outward/authorization"
+// @attribute [Authorize]
+// <WorkflowWorkspace Workstep="OUTWARD_AUTHORIZATION" />
+*@
+
+@* // New Code by KK *@
+<PageTitle>Outward Authorization · ACE CTS</PageTitle>
+
+<div class="demo-ops-root">
+    @if (!_reviewMode)
+    {
+        @* ==========================================
+           PHASE 1: SEARCH & BATCH QUEUE
+           ========================================== *@
+        
+        @* Operations Header matching Demo Screenshot *@
+        <div class="demo-card demo-header-card">
+            <div class="demo-header-top">
+                <div class="demo-breadcrumbs">
+                    <span class="demo-bc-bold">ACE CTS Workspace</span>
+                    <span class="demo-bc-slash">/</span>
+                    <span class="demo-bc-dim">Outward Clearing</span>
+                </div>
+                <div class="demo-top-badges">
+                    <span class="demo-audit-badge">Audit events: <strong>58</strong></span>
+                    <span class="demo-user-badge">admin1</span>
+                </div>
+            </div>
+            <div class="demo-header-bottom">
+                <div class="demo-title-cluster">
+                    <h1 class="demo-main-title">Outward Authorization</h1>
+                    <span class="demo-chip chip-cyan">BRANCH <strong>Head Office</strong></span>
+                    <span class="demo-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+                    <span class="demo-chip chip-blue">DATE <strong>@DateTime.Today.ToString("M/d/yyyy")</strong></span>
+                </div>
+                <button class="demo-ghost-btn" @onclick="ToggleHeaderInfo">
+                    <span class="demo-icon">⚙</span> @(_showHeaderInfo ? "Hide Info" : "Show Info")
+                </button>
+            </div>
+
+            @if (_showHeaderInfo)
+            {
+                <div class="demo-info-drawer">
+                    <div class="demo-info-item"><span>Queue Type:</span> <strong>FIFO Batch Queue</strong></div>
+                    <div class="demo-info-item"><span>SLA Window:</span> <strong>30 minutes</strong></div>
+                    <div class="demo-info-item"><span>Policy:</span> <strong>Dual Control Maker/Checker Strict</strong></div>
+                    <div class="demo-info-item"><span>Workstep:</span> <strong>OUTWARD_AUTHORIZATION</strong></div>
+                </div>
+            }
+
+            <div class="demo-summary-row">
+                <div class="demo-pills-wrap">
+                    <span class="demo-summary-pill pill-cyan">PENDING BATCHES <strong>@_batchRows.Count</strong></span>
+                    <span class="demo-summary-pill pill-green">TOTAL AMOUNT <strong>MMK @TotalQueueAmount.ToString("N0")</strong></span>
+                    <span class="demo-summary-pill pill-green">EXCEPTIONS <strong>@ExceptionBatchCount</strong></span>
+                    <span class="demo-summary-pill pill-orange">OLDEST BATCH AGE <strong>@OldestBatchAge</strong></span>
+                </div>
+                <button class="demo-ghost-btn" @onclick="() => _showSummary = !_showSummary">
+                    <span class="demo-icon">👁</span> @(_showSummary ? "Hide Summary" : "Show Summary")
+                </button>
+            </div>
+
+            @if (_showSummary)
+            {
+                <div class="demo-summary-drawer">
+                    <div class="demo-summary-metric">
+                        <span>Total Items</span>
+                        <strong>@_batchRows.Sum(b => b.Cheques.Count) cheques</strong>
+                    </div>
+                    <div class="demo-summary-metric">
+                        <span>Authorized Today</span>
+                        <strong>18 batches</strong>
+                    </div>
+                    <div class="demo-summary-metric">
+                        <span>Pending Review</span>
+                        <strong>@_batchRows.Count batches</strong>
+                    </div>
+                    <div class="demo-summary-metric">
+                        <span>Cutoff Countdown</span>
+                        <strong class="text-emerald">01:45:12</strong>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Authorization Queue Filters Form Panel *@
+        <div class="demo-card demo-filter-card">
+            <div class="demo-filter-header">
+                <div>
+                    <h2 class="demo-section-title">Authorization Queue Filters</h2>
+                    <span class="demo-match-count">@FilteredBatchRows.Count matching records</span>
+                </div>
+                <button class="demo-link-btn" @onclick="() => _filtersCollapsed = !_filtersCollapsed">
+                    @(_filtersCollapsed ? "⌄ Show Filters" : "⌃ Hide Filters")
+                </button>
+            </div>
+
+            @if (!_filtersCollapsed)
+            {
+                <div class="demo-filter-grid">
+                    <div class="demo-field">
+                        <label>BATCH ID</label>
+                        <input placeholder="e.g. BATCH-001" @bind="_filterBatchId" @bind:event="oninput" />
+                    </div>
+                    <div class="demo-field">
+                        <label>BRANCH CODE</label>
+                        <input placeholder="e.g. 000 or HO" @bind="_filterBranchCode" @bind:event="oninput" />
+                    </div>
+                    <div class="demo-field">
+                        <label>CHEQUE NO.</label>
+                        <input placeholder="e.g. 930101" @bind="_filterChequeNo" @bind:event="oninput" />
+                    </div>
+                    <div class="demo-field">
+                        <label>MICR ACCOUNT NO.</label>
+                        <input placeholder="e.g. 0010002451" @bind="_filterMicrAccount" @bind:event="oninput" />
+                    </div>
+                    <div class="demo-field">
+                        <label>ROUTING NO.</label>
+                        <input placeholder="e.g. 200101" @bind="_filterRoutingNo" @bind:event="oninput" />
+                    </div>
+                    <div class="demo-field">
+                        <label>CREDIT ACCOUNT NO.</label>
+                        <input placeholder="Credit account" @bind="_filterCreditAccount" @bind:event="oninput" />
+                    </div>
+                    <div class="demo-field">
+                        <label>AMOUNT</label>
+                        <input placeholder="e.g. 688500" @bind="_filterAmount" @bind:event="oninput" />
+                    </div>
+                    <div class="demo-field">
+                        <label>ENDORSEMENT NUMBER</label>
+                        <input placeholder="Endorsement" @bind="_filterEndorsement" @bind:event="oninput" />
+                    </div>
+                    <div class="demo-field">
+                        <label>BATCH TYPE</label>
+                        <input placeholder="CDC / Normal" @bind="_filterBatchType" @bind:event="oninput" />
+                    </div>
+                    <div class="demo-field">
+                        <label>VALUE DATE</label>
+                        <input type="date" @bind="_filterValueDate" />
+                    </div>
+                    <div class="demo-field">
+                        <label>SCAN DATE</label>
+                        <input type="date" @bind="_filterScanDate" />
+                    </div>
+                    <div class="demo-field demo-filter-actions">
+                        <button class="demo-subtle-btn" @onclick="ClearFilters">Clear Filters</button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Authorization Batch Queue Table matching screenshot *@
+        <div class="demo-card demo-table-card">
+            <div class="demo-table-title-bar">
+                <h3 class="demo-section-title">Authorization Batch Queue</h3>
+                <span class="demo-table-hint">Click any batch row to review batch instruments</span>
+            </div>
+            <div class="demo-table-scroller">
+                <table class="demo-data-table">
+                    <thead>
+                        <tr>
+                            <th>BATCH ID</th>
+                            <th>BRANCH</th>
+                            <th>MAKER</th>
+                            <th class="text-center">TOTAL CHEQUES</th>
+                            <th class="text-right">BATCH AMOUNT</th>
+                            <th class="text-right">CALCULATED AMOUNT</th>
+                            <th>SCAN DATE/TIME</th>
+                            <th>STATUS</th>
+                            <th>SLA AGE</th>
+                            <th>MAKER-CHECKER</th>
+                            <th>EXCEPTION</th>
+                            @*
+                            // Original Code
+                            <th class="text-center">ACTION</th>
+                            *@
+                            @* // Code Added by KK *@
+                            <th class="demo-th-chevron" aria-label="Open workitem"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (FilteredBatchRows.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="12" class="demo-empty-cell">
+                                    No batches matching filter in Outward Authorization queue.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var row in FilteredBatchRows)
+                            {
+                                <tr class="demo-clickable-row" @onclick="() => OpenBatchReview(row)">
+                                    <td class="demo-batch-id-cell">@row.BatchNo</td>
+                                    <td>@row.BranchCode</td>
+                                    <td>@row.Maker</td>
+                                    <td class="text-center">@row.Cheques.Count</td>
+                                    <td class="text-right font-medium">@row.BatchAmount.ToString("N0")</td>
+                                    <td class="text-right font-medium">@row.CalculatedAmount.ToString("N0")</td>
+                                    <td class="demo-date-cell">@row.ScanDateTime.ToString("M/d/yyyy, h:mm:ss tt")</td>
+                                    <td>
+                                        <span class="demo-tag tag-pending">Pending Authorization</span>
+                                    </td>
+                                    <td>
+                                        <span class="demo-sla-cell">⏱ @row.SlaAge</span>
+                                    </td>
+                                    <td>
+                                        <span class="demo-tag tag-blocked">⚠ Blocked</span>
+                                    </td>
+                                    <td>
+                                        <span class="demo-tag tag-clear">Clear</span>
+                                    </td>
+                                    @*
+                                    // Original Code
+                                    <td class="text-center">
+                                        <button class="demo-review-btn" @onclick:stopPropagation="true" @onclick="() => OpenBatchReview(row)">
+                                            Review →
+                                        </button>
+                                    </td>
+                                    *@
+                                    @* // Code Added by KK *@
+                                    <td class="text-right demo-chevron-cell">
+                                        <span class="demo-chevron-arrow">›</span>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    else
+    {
+        @* ==========================================
+           PHASE 2: DETAILED BATCH REVIEW WORKSPACE
+           (Exact match to 2nd screenshot)
+           ========================================== *@
+        
+        @* Batch Review Workspace Header *@
+        <div class="demo-card demo-header-card">
+            <div class="demo-header-top">
+                <div class="demo-breadcrumbs">
+                    <span class="demo-bc-bold">ACE CTS Workspace</span>
+                    <span class="demo-bc-slash">/</span>
+                    <span class="demo-bc-link" @onclick="ExitReview">Outward</span>
+                    <span class="demo-bc-slash">/</span>
+                    <span class="demo-bc-dim">Authorization</span>
+                </div>
+                <div class="demo-top-badges">
+                    <span class="demo-audit-badge">Audit events: <strong>58</strong></span>
+                    <span class="demo-user-badge">admin1</span>
+                </div>
+            </div>
+            <div class="demo-header-bottom">
+                <div class="demo-title-cluster">
+                    <h1 class="demo-main-title">Batch Review @_selectedBatch?.BatchNo</h1>
+                    <span class="demo-chip chip-blocked">Blocked</span>
+                    <span class="demo-chip chip-cyan">BRANCH <strong>Head Office</strong></span>
+                    <span class="demo-chip chip-blue">ROLE <strong>ADMIN</strong></span>
+                    <span class="demo-chip chip-blue">DATE <strong>@DateTime.Today.ToString("M/d/yyyy")</strong></span>
+                </div>
+                <div class="demo-header-actions">
+                    <button class="demo-ghost-btn" @onclick="ToggleHeaderInfo">
+                        <span class="demo-icon">⚙</span> Show Info
+                    </button>
+                    <button class="demo-ghost-btn" @onclick="ExitReview">
+                        ✕ Exit to Queue
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* 3-Column Review Grid Layout *@
+        <div class="demo-three-col-grid">
+            @* Left Column: Authorization Image Review *@
+            <section class="demo-col-left">
+                <div class="demo-card demo-pane">
+                    <div class="demo-pane-header">
+                        <h2 class="demo-pane-title">Authorization Image Review</h2>
+                        <span class="demo-pane-sub">Cheque @_activeCheque?.ChequeNo / @_activeCheque?.Uic</span>
+                    </div>
+
+                    <div class="demo-image-tags">
+                        <span class="demo-badge-pill pill-blue-solid">@(_activeCheque?.Discarded == true ? "Discarded" : "Scanned")</span>
+                        <span class="demo-badge-pill pill-uic">UIC @_activeCheque?.Uic</span>
+                    </div>
+
+                    <div class="demo-cheque-box">
+                        <div class="demo-cheque-canvas">
+                            @if (_imageView == "signature")
+                            {
+                                <div class="demo-sig-mock">
+                                    <span class="demo-sig-label">CBS Verified Signature</span>
+                                    <svg viewBox="0 0 300 80" class="demo-sig-svg">
+                                        <path d="M 10 50 Q 50 10 90 45 T 160 30 T 230 55 T 280 20" fill="none" stroke="#172033" stroke-width="2.5" stroke-linecap="round" />
+                                    </svg>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="demo-cheque-sample">
+                                    <div class="sample-bank-line">
+                                        <strong>MM Demo Bank</strong>
+                                        <span class="sample-date">Date: <strong>@DateTime.Today.ToString("dd / MM / yyyy")</strong></span>
+                                    </div>
+                                    <div class="sample-payee-line">
+                                        <span>Pay to:</span> <strong>@(_activeCheque?.DrawerName ?? "Demo Payee 1")</strong>
+                                    </div>
+                                    <div class="sample-amount-box">
+                                        MMK @_activeCheque?.Amount.ToString("N0")
+                                    </div>
+                                    <div class="sample-sig-line">
+                                        <svg viewBox="0 0 200 45" class="sample-sig-svg">
+                                            <path d="M 5 35 Q 35 5 70 30 T 130 15 T 180 35" fill="none" stroke="#0F2A44" stroke-width="2" />
+                                        </svg>
+                                    </div>
+                                    <div class="sample-micr-line font-mono">
+                                        ⑈@_activeCheque?.ChequeNo⑈ ⑉@_activeCheque?.RoutingNo⑉ @_activeCheque?.AccountNo ⑈20⑈
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="demo-image-tabs-bar">
+                        <div class="demo-tab-group">
+                            <button class="demo-tab-btn @(_imageView == "front" ? "active" : "")" @onclick='() => _imageView = "front"'>Front</button>
+                            <button class="demo-tab-btn @(_imageView == "rear" ? "active" : "")" @onclick='() => _imageView = "rear"'>Rear</button>
+                            <button class="demo-tab-btn @(_imageView == "signature" ? "active" : "")" @onclick='() => _imageView = "signature"'>Signature</button>
+                        </div>
+                        <span class="demo-iqa-tag">Image quality · <strong>Good</strong></span>
+                    </div>
+                </div>
+            </section>
+
+            @* Middle Column: Instrument List & Audit Timeline *@
+            <section class="demo-col-mid">
+                <div class="demo-card demo-pane">
+                    <div class="demo-pane-header">
+                        <h2 class="demo-pane-title">Instrument List</h2>
+                        <span class="demo-pane-sub">@_selectedBatch?.Cheques.Count item(s)</span>
+                    </div>
+                    <div class="demo-table-scroller max-h-list">
+                        <table class="demo-data-table mini-table">
+                            <thead>
+                                <tr>
+                                    <th>CHEQUE NO</th>
+                                    <th>ROUTING NO</th>
+                                    <th>MICR ACCOUNT</th>
+                                    <th class="text-right">AMOUNT</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (_selectedBatch?.Cheques is not null)
+                                {
+                                    @foreach (var chq in _selectedBatch.Cheques)
+                                    {
+                                        var isCurrent = chq.ChequeId == _activeCheque?.ChequeId;
+                                        <tr class="demo-clickable-row @(isCurrent ? "row-selected" : "")" @onclick="() => SelectCheque(chq)">
+                                            <td class="font-bold text-blue">@chq.ChequeNo</td>
+                                            <td>@chq.RoutingNo</td>
+                                            <td class="font-mono">@chq.AccountNo</td>
+                                            <td class="text-right font-medium">@chq.Amount.ToString("N0")</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                @* Audit Timeline Panel matching screenshot *@
+                <div class="demo-card demo-pane">
+                    <div class="demo-pane-header">
+                        <div>
+                            <h2 class="demo-pane-title">Audit Timeline</h2>
+                            <span class="demo-pane-sub">4 audit event(s)</span>
+                        </div>
+                        <button class="demo-link-btn" @onclick="() => _auditOpen = !_auditOpen">
+                            @(_auditOpen ? "⌃ Close Audit" : "⌄ Open Audit")
+                        </button>
+                    </div>
+
+                    @if (_auditOpen)
+                    {
+                        <div class="demo-audit-events-list">
+                            <div class="demo-audit-item">
+                                <span class="demo-audit-time">8/11/2026, 2:03:27 PM · Admin One</span>
+                                <strong class="demo-audit-act">Submit Scanning Batch</strong>
+                                <p class="demo-audit-desc">Batch @_selectedBatch?.BatchNo uploaded successfully.</p>
+                            </div>
+                            <div class="demo-audit-item">
+                                <span class="demo-audit-time">8/11/2026, 2:03:27 PM · Admin One</span>
+                                <strong class="demo-audit-act">Save Scanning Batch</strong>
+                                <p class="demo-audit-desc">Scanning batch validated before submit</p>
+                            </div>
+                            <div class="demo-audit-item">
+                                <span class="demo-audit-time">8/11/2026, 2:00:39 PM · Admin One</span>
+                                <strong class="demo-audit-act">Scan Cheques</strong>
+                                <p class="demo-audit-desc">Scanner FB 30 U added 3 demo cheques</p>
+                            </div>
+                            <div class="demo-audit-item">
+                                <span class="demo-audit-time">8/11/2026, 2:00:37 PM · Admin One</span>
+                                <strong class="demo-audit-act">New Scanning Batch</strong>
+                                <p class="demo-audit-desc">Created draft batch @_selectedBatch?.BatchNo</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+
+            @* Right Column: Verification Summary & Checker Decision *@
+            <aside class="demo-col-right">
+                <div class="demo-card demo-pane">
+                    <div class="demo-pane-header">
+                        <h2 class="demo-pane-title">Verification Summary</h2>
+                    </div>
+
+                    <div class="demo-summary-group">
+                        <span class="demo-group-label">CREDIT ACCOUNT</span>
+                        <div class="demo-kv-row"><span>Account No.</span><strong>@_activeCheque?.AccountNo</strong></div>
+                        <div class="demo-kv-row"><span>Status</span><span class="text-green-bold">Active</span></div>
+                        <div class="demo-kv-row"><span>Customer ID</span><strong>ACC-001</strong></div>
+                        <div class="demo-kv-row"><span>Account Branch</span><strong>Head Office</strong></div>
+                        <div class="demo-kv-row"><span>Account Name</span><strong>Demo Trading Co.</strong></div>
+                    </div>
+
+                    <div class="demo-summary-group">
+                        <span class="demo-group-label">CHEQUE DETAILS</span>
+                        <div class="demo-kv-row"><span>Cheque No.</span><strong>@_activeCheque?.ChequeNo</strong></div>
+                        <div class="demo-kv-row"><span>Routing No.</span><strong>@_activeCheque?.RoutingNo</strong></div>
+                        <div class="demo-kv-row"><span>MICR Account</span><strong>@_activeCheque?.AccountNo</strong></div>
+                        <div class="demo-kv-row"><span>Amount</span><strong>MMK @_activeCheque?.Amount.ToString("N0")</strong></div>
+                        <div class="demo-kv-row"><span>Cheque Date</span><strong>2026-08-11</strong></div>
+                    </div>
+
+                    <div class="demo-summary-group">
+                        <span class="demo-group-label">BATCH TOTALS</span>
+                        <div class="demo-kv-row"><span>Total Cheques</span><strong>@_selectedBatch?.Cheques.Count</strong></div>
+                        <div class="demo-kv-row"><span>Batch Amount</span><strong>MMK @_selectedBatch?.BatchAmount.ToString("N0")</strong></div>
+                        <div class="demo-kv-row"><span>Calculated</span><strong>MMK @ActiveAcceptedAmount.ToString("N0")</strong></div>
+                        <div class="demo-kv-row"><span>Accept Count</span><strong>@ActiveAcceptCount</strong></div>
+                        <div class="demo-kv-row"><span>Discard Count</span><strong>@ActiveDiscardCount</strong></div>
+                    </div>
+
+                    <div class="demo-summary-group">
+                        <span class="demo-group-label">MAKER DETAILS</span>
+                        <div class="demo-kv-row"><span>Maker</span><strong>@_selectedBatch?.Maker</strong></div>
+                        <div class="demo-kv-row"><span>Created At</span><strong>8/11/2026, 2:00:37 PM</strong></div>
+                        <div class="demo-kv-row"><span>Restriction</span><span class="text-red-bold">Same maker cannot authorize</span></div>
+                    </div>
+                </div>
+
+                @* Checker Decision Box *@
+                <div class="demo-card demo-pane">
+                    <div class="demo-pane-header">
+                        <h2 class="demo-pane-title">Checker Decision</h2>
+                    </div>
+
+                    <div class="demo-field">
+                        <label>REMARKS</label>
+                        <input placeholder="" @bind="_checkerRemarks" />
+                    </div>
+
+                    <div class="demo-checkbox-group">
+                        <label class="demo-checkbox-line">
+                            <input type="checkbox" checked="@(_activeCheque?.Discarded == true)" @onchange="ToggleDiscard" />
+                            <span>Discard Cheque</span>
+                        </label>
+                        <label class="demo-checkbox-line">
+                            <input type="checkbox" @bind="_batchRemarks" />
+                            <span>Batch-level remarks</span>
+                        </label>
+                    </div>
+
+                    <div class="demo-validation-box">
+                        <div class="demo-val-title">⚠ Validation summary</div>
+                        <ul class="demo-val-list">
+                            <li>Maker/checker separation blocks this user from authorizing the selected batch.</li>
+                        </ul>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        @* Sticky Action Bar matching bottom of screenshot 2 *@
+        <div class="demo-sticky-bar">
+            <div class="demo-bar-left">
+                <button class="demo-action-btn btn-secondary" @onclick="PrevCheque">
+                    ◀ Previous
+                </button>
+                <button class="demo-action-btn btn-secondary" @onclick="NextCheque">
+                    Next ▶
+                </button>
+            </div>
+            <div class="demo-bar-right">
+                <button class="demo-action-btn btn-primary" @onclick='() => DoBatchAction("APPROVE")'>
+                    ✓ Authorize Batch
+                </button>
+                <button class="demo-action-btn btn-secondary" @onclick='() => DoBatchAction("REPAIR")'>
+                    ✎ Send to Repair
+                </button>
+                <button class="demo-action-btn btn-danger" @onclick='() => DoBatchAction("DISCARD")'>
+                    🗑 Discard Batch
+                </button>
+                <button class="demo-action-btn btn-secondary" @onclick="ExitReview">
+                    ✕ Exit
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@* ==========================================
+   SELF-CONTAINED STYLES FOR EXACT DEMO MATCH
+   ========================================== *@
+@*
+<style>
+    .demo-ops-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #172033;
+        background: #F5F7FA;
+        min-height: calc(100vh - 80px);
+        padding: 16px 20px 80px;
+        box-sizing: border-box;
+    }
+    .demo-ops-root * { box-sizing: border-box; }
+
+    .demo-card {
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+        box-shadow: 0 1px 3px rgba(15, 42, 68, 0.05);
+    }
+
+    /* Header */
+    .demo-header-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+    .demo-breadcrumbs {
+        font-size: 13px;
+        color: #667085;
+    }
+    .demo-bc-bold { font-weight: 700; color: #172033; }
+    .demo-bc-slash { margin: 0 6px; color: #A0AEC0; }
+    .demo-bc-dim { color: #667085; }
+    .demo-bc-link { color: #2563EB; cursor: pointer; text-decoration: underline; }
+
+    .demo-top-badges {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .demo-audit-badge, .demo-user-badge {
+        font-size: 12px;
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 4px 10px;
+        color: #172033;
+    }
+    .demo-user-badge { font-weight: 700; }
+
+    .demo-header-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        border-top: 1px solid #EEF2F6;
+        padding-top: 12px;
+    }
+    .demo-title-cluster {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .demo-main-title {
+        font-size: 20px;
+        font-weight: 800;
+        margin: 0;
+        color: #0F2A44;
+        letter-spacing: -0.01em;
+    }
+    .demo-chip {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .chip-cyan { background: #E0F2FE; color: #0369A1; border: 1px solid #BAE6FD; }
+    .chip-blue { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+    .chip-blocked { background: #E0E7FF; color: #4338CA; border: 1px solid #C7D2FE; }
+
+    .demo-ghost-btn {
+        background: #FFFFFF;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #172033;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .demo-ghost-btn:hover { background: #F8FAFC; border-color: #CBD5E1; }
+
+    .demo-summary-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid #EEF2F6;
+    }
+    .demo-pills-wrap {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .demo-summary-pill {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 5px 12px;
+        border-radius: 20px;
+        letter-spacing: 0.03em;
+    }
+    .pill-cyan { background: #E0F2FE; color: #0284C7; border: 1px solid #BAE6FD; }
+    .pill-green { background: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0; }
+    .pill-orange { background: #FEF3C7; color: #B45309; border: 1px solid #FDE68A; }
+
+    .demo-info-drawer, .demo-summary-drawer {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px;
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-top: 12px;
+        font-size: 12px;
+    }
+    .demo-info-item span { color: #64748B; margin-right: 6px; }
+    .demo-summary-metric span { display: block; color: #64748B; font-size: 11px; }
+    .demo-summary-metric strong { display: block; font-size: 15px; color: #0F2A44; margin-top: 2px; }
+    .text-emerald { color: #059669 !important; }
+
+    /* Filters */
+    .demo-filter-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+    .demo-section-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin: 0;
+    }
+    .demo-match-count {
+        font-size: 12px;
+        color: #64748B;
+        margin-top: 2px;
+        display: block;
+    }
+    .demo-link-btn {
+        background: none;
+        border: none;
+        color: #2563EB;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        padding: 4px 8px;
+    }
+    .demo-link-btn:hover { text-decoration: underline; }
+
+    .demo-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px 16px;
+        padding-top: 8px;
+        border-top: 1px solid #EEF2F6;
+    }
+    @@media (max-width: 1024px) { .demo-filter-grid { grid-template-columns: repeat(2, 1fr); } }
+    @@media (max-width: 640px) { .demo-filter-grid { grid-template-columns: 1fr; } }
+
+    .demo-field label {
+        display: block;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        color: #64748B;
+        margin-bottom: 4px;
+    }
+    .demo-field input {
+        width: 100%;
+        height: 36px;
+        border: 1px solid #D8DEE6;
+        border-radius: 6px;
+        padding: 0 10px;
+        font-size: 12px;
+        color: #172033;
+        background: #FFFFFF;
+        outline: none;
+        transition: border-color 0.15s;
+    }
+    .demo-field input:focus { border-color: #2563EB; }
+    .demo-filter-actions {
+        display: flex;
+        align-items: flex-end;
+    }
+    .demo-subtle-btn {
+        height: 36px;
+        width: 100%;
+        background: #F1F5F9;
+        border: 1px solid #CBD5E1;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #475569;
+        cursor: pointer;
+    }
+    .demo-subtle-btn:hover { background: #E2E8F0; }
+
+    /* Tables */
+    .demo-table-card { padding: 0; overflow: hidden; }
+    .demo-table-title-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 20px;
+        border-bottom: 1px solid #EEF2F6;
+    }
+    .demo-table-hint { font-size: 12px; color: #64748B; }
+
+    .demo-table-scroller {
+        width: 100%;
+        overflow-x: auto;
+    }
+    .max-h-list { max-height: 280px; overflow-y: auto; }
+
+    .demo-data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        text-align: left;
+    }
+    .demo-data-table th {
+        background: #F8FAFC;
+        color: #475569;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 10px 14px;
+        border-bottom: 1px solid #E2E8F0;
+        white-space: nowrap;
+    }
+    .demo-data-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid #EEF2F6;
+        color: #172033;
+        white-space: nowrap;
+    }
+    .demo-clickable-row { cursor: pointer; transition: background 0.12s; }
+    .demo-clickable-row:hover { background: #F0F7FF; }
+    .row-selected { background: #EFF6FF !important; border-left: 3px solid #2563EB; }
+
+    .demo-batch-id-cell { font-weight: 700; color: #0F2A44; font-family: monospace; }
+    .demo-date-cell { color: #64748B; font-size: 11px; }
+    .demo-empty-cell { text-align: center; color: #94A3B8; padding: 32px 16px; }
+
+    .demo-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+    .tag-pending { background: #FEF3C7; color: #B45309; border: 1px solid #FDE68A; }
+    .tag-blocked { background: #FEE2E2; color: #B91C1C; border: 1px solid #FECACA; }
+    .tag-clear { background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; }
+
+    .demo-sla-cell { color: #D97706; font-weight: 700; font-size: 11px; }
+
+    .demo-review-btn {
+        background: #EFF6FF;
+        border: 1px solid #BFDBFE;
+        color: #1D4ED8;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .demo-review-btn:hover { background: #DBEAFE; }
+
+    /* 3-Column Layout (Phase 2) */
+    .demo-three-col-grid {
+        display: grid;
+        grid-template-columns: 360px 1fr 340px;
+        gap: 16px;
+        align-items: start;
+    }
+    @@media (max-width: 1200px) {
+        .demo-three-col-grid { grid-template-columns: 1fr; }
+    }
+
+    .demo-pane { padding: 14px 16px; }
+    .demo-pane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #EEF2F6;
+        padding-bottom: 8px;
+    }
+    .demo-pane-title { font-size: 13px; font-weight: 800; color: #0F2A44; margin: 0; }
+    .demo-pane-sub { font-size: 11px; color: #64748B; }
+
+    .demo-image-tags {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 10px;
+    }
+    .demo-badge-pill {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 12px;
+    }
+    .pill-blue-solid { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+    .pill-uic { background: #F8FAFC; color: #0F2A44; border: 1px solid #CBD5E1; font-family: monospace; }
+
+    .demo-cheque-box {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 10px;
+        min-height: 180px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .demo-cheque-sample {
+        width: 100%;
+        background: #FFFFFF;
+        border: 1px solid #CBD5E1;
+        border-radius: 6px;
+        padding: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .sample-bank-line {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        margin-bottom: 8px;
+        color: #0F2A44;
+    }
+    .sample-payee-line { font-size: 11px; color: #475569; margin-bottom: 8px; }
+    .sample-amount-box {
+        display: inline-block;
+        background: #F8FAFC;
+        border: 1px solid #CBD5E1;
+        padding: 4px 8px;
+        font-size: 12px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin-bottom: 8px;
+    }
+    .sample-sig-line {
+        height: 35px;
+        display: flex;
+        justify-content: flex-end;
+    }
+    .sample-sig-svg { width: 120px; height: 35px; }
+    .sample-micr-line {
+        font-size: 10px;
+        letter-spacing: 0.15em;
+        text-align: center;
+        border-top: 1px dashed #CBD5E1;
+        padding-top: 6px;
+        margin-top: 4px;
+        color: #0F2A44;
+    }
+
+    .demo-sig-mock {
+        width: 100%;
+        text-align: center;
+        padding: 16px;
+    }
+    .demo-sig-label { font-size: 11px; color: #64748B; display: block; margin-bottom: 8px; }
+    .demo-sig-svg { width: 100%; max-height: 80px; }
+
+    .demo-image-tabs-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid #EEF2F6;
+    }
+    .demo-tab-group { display: flex; gap: 4px; }
+    .demo-tab-btn {
+        background: #F1F5F9;
+        border: 1px solid #CBD5E1;
+        border-radius: 4px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .demo-tab-btn.active {
+        background: #2563EB;
+        color: #FFFFFF;
+        border-color: #2563EB;
+    }
+    .demo-iqa-tag { font-size: 11px; color: #15803D; }
+
+    /* Audit items */
+    .demo-audit-events-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding-top: 8px;
+    }
+    .demo-audit-item {
+        border-left: 2px solid #2563EB;
+        padding-left: 10px;
+    }
+    .demo-audit-time { font-size: 10px; color: #94A3B8; display: block; }
+    .demo-audit-act { font-size: 12px; color: #0F2A44; display: block; margin: 1px 0; }
+    .demo-audit-desc { font-size: 11px; color: #64748B; margin: 0; }
+
+    /* Verification Summary groups */
+    .demo-summary-group {
+        border-bottom: 1px solid #EEF2F6;
+        padding-bottom: 10px;
+        margin-bottom: 10px;
+    }
+    .demo-summary-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .demo-group-label {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        color: #64748B;
+        display: block;
+        margin-bottom: 6px;
+    }
+    .demo-kv-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        padding: 2px 0;
+    }
+    .demo-kv-row span { color: #64748B; }
+    .demo-kv-row strong { color: #172033; }
+    .text-green-bold { color: #15803D; font-weight: 700; }
+    .text-red-bold { color: #B91C1C; font-weight: 700; }
+
+    .demo-checkbox-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 10px 0;
+    }
+    .demo-checkbox-line {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .demo-validation-box {
+        background: #FEF2F2;
+        border: 1px solid #FECACA;
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-top: 10px;
+    }
+    .demo-val-title {
+        font-size: 11px;
+        font-weight: 800;
+        color: #B91C1C;
+        margin-bottom: 4px;
+    }
+    .demo-val-list {
+        margin: 0;
+        padding-left: 16px;
+        font-size: 11px;
+        color: #991B1B;
+    }
+
+    /* Sticky Bottom Action Bar */
+    .demo-sticky-bar {
+        position: fixed;
+        bottom: 0;
+        left: 260px; /* Aligns with CTS sidebar */
+        right: 0;
+        height: 60px;
+        background: #FFFFFF;
+        border-top: 1px solid #D8DEE6;
+        box-shadow: 0 -2px 10px rgba(15, 42, 68, 0.08);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 24px;
+        z-index: 99;
+    }
+    @@media (max-width: 768px) {
+        .demo-sticky-bar { left: 0; }
+    }
+    .demo-bar-left, .demo-bar-right { display: flex; gap: 8px; }
+
+    .demo-action-btn {
+        height: 36px;
+        padding: 0 14px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid transparent;
+        transition: all 0.15s;
+    }
+    .btn-primary { background: #0F2A44; color: #FFFFFF; border-color: #0F2A44; }
+    .btn-primary:hover { background: #1E4E79; }
+    .btn-secondary { background: #FFFFFF; color: #172033; border-color: #D8DEE6; }
+    .btn-secondary:hover { background: #F8FAFC; }
+    .btn-danger { background: #B91C1C; color: #FFFFFF; border-color: #B91C1C; }
+    .btn-danger:hover { background: #991B1B; }
+
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .font-mono { font-family: monospace; }
+    .font-medium { font-weight: 600; }
+    .font-bold { font-weight: 700; }
+    .text-blue { color: #2563EB; }
+</style>
+*@
+
+@* // Code Added by KK *@
+<style>
+    .demo-ops-root {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: var(--text, #172033);
+        background: var(--background, #F5F7FA);
+        min-height: calc(100vh - 80px);
+        padding: 16px 20px 80px;
+        box-sizing: border-box;
+    }
+    .demo-ops-root * { box-sizing: border-box; }
+
+    .demo-card {
+        background: var(--surface-solid, #FFFFFF);
+        border: 1px solid var(--border, #D8DEE6);
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+        box-shadow: var(--shadow, 0 1px 3px rgba(15, 42, 68, 0.05));
+    }
+
+    /* Header */
+    .demo-header-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+    .demo-breadcrumbs {
+        font-size: 13px;
+        color: var(--muted, #667085);
+    }
+    .demo-bc-bold { font-weight: 700; color: var(--heading, #172033); }
+    .demo-bc-slash { margin: 0 6px; color: var(--placeholder, #A0AEC0); }
+    .demo-bc-dim { color: var(--muted, #667085); }
+    .demo-bc-link { color: var(--accent, #2563EB); cursor: pointer; text-decoration: underline; }
+
+    .demo-top-badges {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .demo-audit-badge, .demo-user-badge {
+        font-size: 12px;
+        background: var(--surface, #FFFFFF);
+        border: 1px solid var(--border, #D8DEE6);
+        border-radius: 6px;
+        padding: 4px 10px;
+        color: var(--text, #172033);
+    }
+    .demo-user-badge { font-weight: 700; color: var(--heading, #0F2A44); }
+
+    .demo-header-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        border-top: 1px solid var(--separator, #EEF2F6);
+        padding-top: 12px;
+    }
+    .demo-title-cluster {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .demo-main-title {
+        font-size: 20px;
+        font-weight: 800;
+        margin: 0;
+        color: var(--heading, #0F2A44);
+        letter-spacing: -0.01em;
+    }
+    .demo-chip {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .chip-cyan { background: rgba(8, 145, 178, 0.12); color: #06B6D4; border: 1px solid rgba(8, 145, 178, 0.3); }
+    .chip-blue { background: rgba(59, 130, 246, 0.12); color: #3B82F6; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .chip-blocked { background: rgba(99, 102, 241, 0.12); color: #818CF8; border: 1px solid rgba(99, 102, 241, 0.3); }
+
+    .demo-ghost-btn {
+        background: var(--surface, #FFFFFF);
+        border: 1px solid var(--border, #D8DEE6);
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text, #172033);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s ease;
+    }
+    .demo-ghost-btn:hover { background: var(--hover, #F8FAFC); border-color: var(--border, #CBD5E1); }
+
+    .demo-info-drawer, .demo-summary-drawer {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px;
+        background: var(--surface-secondary, #F8FAFC);
+        border: 1px solid var(--border, #E2E8F0);
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-top: 14px;
+        font-size: 12px;
+    }
+    .demo-info-item span { color: var(--muted, #64748B); margin-right: 6px; }
+    .demo-summary-metric span { display: block; color: var(--muted, #64748B); font-size: 11px; }
+    .demo-summary-metric strong { display: block; font-size: 15px; color: var(--heading, #0F2A44); margin-top: 2px; }
+
+    .demo-summary-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--separator, #EEF2F6);
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    .demo-pills-wrap { display: flex; gap: 8px; flex-wrap: wrap; }
+    .demo-summary-pill {
+        font-size: 11px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-weight: 600;
+    }
+    .pill-cyan { background: rgba(8, 145, 178, 0.12); color: #06B6D4; }
+    .pill-blue { background: rgba(59, 130, 246, 0.12); color: #3B82F6; }
+    .pill-emerald { background: rgba(16, 185, 129, 0.12); color: #10B981; }
+
+    /* Filters */
+    .demo-filter-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+    .demo-filter-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--heading, #0F2A44);
+        margin: 0;
+    }
+    .demo-filter-count { font-size: 11px; color: var(--muted, #64748B); margin-left: 8px; font-weight: 500; }
+    .demo-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--separator, #EEF2F6);
+    }
+    @@media (max-width: 1200px) {
+        .demo-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @@media (max-width: 768px) {
+        .demo-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @@media (max-width: 480px) {
+        .demo-filter-grid { grid-template-columns: 1fr; }
+    }
+    .demo-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+    }
+    .demo-field-full { grid-column: span 2; }
+    .demo-filter-actions {
+        display: flex;
+        align-items: flex-end;
+    }
+    .demo-subtle-btn {
+        height: 36px;
+        width: 100%;
+        background: var(--surface-secondary, #F1F5F9);
+        border: 1px solid var(--border, #CBD5E1);
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted, #475569);
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .demo-subtle-btn:hover { background: var(--hover, #E2E8F0); }
+    .demo-label, .demo-field label {
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted, #64748B);
+    }
+    .demo-input, .demo-field input, .demo-field select {
+        border: 1px solid var(--border, #CBD5E1);
+        border-radius: 6px;
+        padding: 0 10px;
+        height: 36px;
+        font-size: 12px;
+        color: var(--text, #172033);
+        outline: none;
+        width: 100%;
+        background: var(--surface-solid, #FFFFFF);
+        transition: border 0.15s;
+        box-sizing: border-box;
+    }
+    .demo-input:focus, .demo-field input:focus, .demo-field select:focus { border-color: var(--accent, #0F2A44); }
+
+    /* Tables */
+    .demo-table-panel, .demo-table-card {
+        padding: 0;
+        overflow: hidden;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+    .demo-table-panel-header, .demo-table-title-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--separator, #EEF2F6);
+    }
+    .demo-panel-title, .demo-table-title-bar .demo-section-title { font-size: 14px; font-weight: 800; color: var(--heading, #0F2A44); margin: 0; }
+    .demo-panel-sub, .demo-table-hint { font-size: 12px; color: var(--muted, #64748B); }
+    .demo-table-wrapper, .demo-table-scroller {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        box-sizing: border-box;
+    }
+    .demo-data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        text-align: left;
+    }
+    .demo-data-table th {
+        background: var(--surface-secondary, #F8FAFC);
+        color: var(--muted, #475569);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border, #E2E8F0);
+        border-right: 1px solid var(--separator, #F1F5F9);
+        white-space: nowrap;
+    }
+    .demo-data-table td {
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--separator, #EEF2F6);
+        border-right: 1px solid var(--separator, #F8FAFC);
+        color: var(--text, #172033);
+        white-space: nowrap;
+    }
+    .demo-clickable-row { cursor: pointer; transition: background 0.15s; }
+    .demo-clickable-row:hover { background: var(--hover, #F0F7FF); }
+    .demo-clickable-row.row-selected { background: var(--accent-soft, #EFF6FF); }
+    .demo-th-chevron { width: 32px; padding: 0 10px; }
+    .demo-chevron-cell { width: 32px; padding: 0 10px; }
+    .demo-chevron-arrow { color: var(--placeholder, #94A3B8); font-weight: bold; font-size: 18px; }
+
+    /* Status Badges */
+    .demo-status-pill {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 4px;
+        display: inline-block;
+        text-transform: uppercase;
+    }
+    .status-pending { background: rgba(245, 158, 11, 0.15); color: #D97706; }
+    .status-approved { background: rgba(16, 185, 129, 0.15); color: #10B981; }
+    .status-rejected { background: rgba(239, 68, 68, 0.15); color: #EF4444; }
+
+    .demo-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+    .tag-pending { background: #FEF3C7; color: #B45309; border: 1px solid #FDE68A; }
+    .tag-blocked { background: #FEE2E2; color: #B91C1C; border: 1px solid #FECACA; }
+    .tag-clear { background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; }
+    .tag-dormant {
+        font-size: 10px;
+        font-weight: 700;
+        background: rgba(59, 130, 246, 0.12);
+        color: #3B82F6;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    .demo-sla-cell { color: #D97706; font-weight: 700; font-size: 11px; }
+
+    /* Phase 2: Authentic 3-Column Review Grid */
+    .demo-three-col-grid {
+        display: grid;
+        grid-template-columns: 360px 1fr 350px;
+        gap: 16px;
+        align-items: start;
+        margin-bottom: 24px;
+    }
+    @@media (max-width: 1280px) {
+        .demo-three-col-grid { grid-template-columns: 1fr; }
+    }
+    .demo-col-left, .demo-col-mid, .demo-col-right {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .demo-pane { padding: 14px 16px; margin-bottom: 0; }
+    .demo-pane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        border-bottom: 1px solid var(--separator, #EEF2F6);
+        padding-bottom: 8px;
+    }
+    .demo-pane-title { font-size: 13px; font-weight: 800; color: var(--heading, #0F2A44); margin: 0; }
+    .demo-pane-sub { font-size: 11px; color: var(--muted, #64748B); }
+
+    .demo-link-btn {
+        background: none;
+        border: none;
+        color: var(--accent, #2563EB);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    /* Cheque Image Review Box matching exact demo screenshot */
+    .demo-image-tags {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 10px;
+    }
+    .demo-badge-pill {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 12px;
+    }
+    .pill-blue-solid { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+    .pill-uic { background: var(--surface-secondary, #F8FAFC); color: var(--heading, #0F2A44); border: 1px solid var(--border, #CBD5E1); font-family: monospace; }
+
+    .demo-cheque-box {
+        background: var(--surface-secondary, #F8FAFC);
+        border: 1px solid var(--border, #E2E8F0);
+        border-radius: 8px;
+        padding: 10px;
+        min-height: 180px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    .demo-cheque-canvas {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .demo-cheque-sample {
+        width: 100%;
+        max-width: 320px;
+        background: #FFFFFF;
+        border: 1px solid #CBD5E1;
+        border-radius: 6px;
+        padding: 10px 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        color: #172033;
+    }
+    .sample-bank-line {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        margin-bottom: 6px;
+        color: #0F2A44;
+    }
+    .sample-date strong { color: #0F2A44; }
+    .sample-payee-line { font-size: 11px; color: #475569; margin-bottom: 6px; }
+    .sample-payee-line strong { color: #172033; }
+    .sample-amount-box {
+        display: inline-block;
+        background: #F8FAFC;
+        border: 1px solid #CBD5E1;
+        padding: 4px 8px;
+        font-size: 12px;
+        font-weight: 800;
+        color: #0F2A44;
+        margin-bottom: 6px;
+        font-family: monospace;
+    }
+    .sample-sig-line {
+        height: 35px;
+        display: flex;
+        justify-content: flex-end;
+    }
+    .sample-sig-svg { width: 120px; height: 35px; max-width: 120px; }
+    .sample-micr-line {
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-align: center;
+        border-top: 1px dashed #CBD5E1;
+        padding-top: 6px;
+        margin-top: 4px;
+        color: #0F2A44;
+    }
+
+    .demo-sig-mock {
+        width: 100%;
+        text-align: center;
+        padding: 12px;
+    }
+    .demo-sig-label { font-size: 11px; color: var(--muted, #64748B); display: block; margin-bottom: 8px; }
+    .demo-sig-svg { width: 100%; max-width: 280px; max-height: 75px; }
+
+    .demo-image-tabs-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--separator, #EEF2F6);
+    }
+    .demo-tab-group { display: flex; gap: 4px; }
+    .demo-tab-btn {
+        background: var(--surface-secondary, #F1F5F9);
+        border: 1px solid var(--border, #CBD5E1);
+        color: var(--text, inherit);
+        border-radius: 4px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .demo-tab-btn.active {
+        background: var(--primary, #2563EB);
+        color: #FFFFFF;
+        border-color: var(--primary, #2563EB);
+    }
+    .demo-iqa-tag { font-size: 11px; color: #15803D; }
+
+    /* Middle column mini table */
+    .mini-table th {
+        padding: 8px 10px;
+        font-size: 10px;
+    }
+    .mini-table td {
+        padding: 8px 10px;
+        font-size: 11px;
+    }
+    .max-h-list { max-height: 220px; overflow-y: auto; }
+
+    /* Audit items */
+    .demo-audit-events-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding-top: 8px;
+    }
+    .demo-audit-item {
+        border-left: 2px solid var(--accent, #2563EB);
+        padding-left: 10px;
+    }
+    .demo-audit-time { font-size: 10px; color: var(--muted, #94A3B8); display: block; }
+    .demo-audit-act { font-size: 12px; color: var(--heading, #0F2A44); display: block; margin: 1px 0; }
+    .demo-audit-desc { font-size: 11px; color: var(--muted, #64748B); margin: 0; }
+
+    /* Verification Summary groups */
+    .demo-summary-group {
+        border-bottom: 1px solid var(--separator, #EEF2F6);
+        padding-bottom: 10px;
+        margin-bottom: 10px;
+    }
+    .demo-summary-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .demo-group-label {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        color: var(--muted, #64748B);
+        display: block;
+        margin-bottom: 6px;
+    }
+    .demo-kv-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        padding: 2px 0;
+    }
+    .demo-kv-row span { color: var(--muted, #64748B); }
+    .demo-kv-row strong { color: var(--heading, #172033); }
+    .text-green-bold { color: #15803D; font-weight: 700; }
+    .text-red-bold { color: #B91C1C; font-weight: 700; }
+
+    .demo-checkbox-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 10px 0;
+    }
+    .demo-checkbox-line {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .demo-validation-box {
+        background: rgba(239, 68, 68, 0.12);
+        border: 1px solid rgba(239, 68, 68, 0.25);
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-top: 10px;
+    }
+    .demo-val-title {
+        font-size: 11px;
+        font-weight: 800;
+        color: #B91C1C;
+        margin-bottom: 4px;
+    }
+    .demo-val-list {
+        margin: 0;
+        padding-left: 16px;
+        font-size: 11px;
+        color: #DC2626;
+    }
+
+    /* Sticky Bottom Action Bar */
+    .demo-sticky-bar {
+        position: fixed;
+        bottom: 0;
+        left: 260px; /* Aligns with CTS sidebar */
+        right: 0;
+        height: 60px;
+        background: var(--surface-solid, #FFFFFF);
+        border-top: 1px solid var(--border, #D8DEE6);
+        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 24px;
+        z-index: 99;
+    }
+    @@media (max-width: 768px) {
+        .demo-sticky-bar { left: 0; }
+    }
+    .demo-bar-left, .demo-bar-right { display: flex; gap: 8px; }
+
+    .demo-action-btn {
+        height: 36px;
+        padding: 0 14px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid transparent;
+        transition: all 0.15s;
+    }
+    .btn-primary { background: var(--primary, #0F2A44); color: #FFFFFF; border-color: var(--primary, #0F2A44); }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-secondary { background: var(--surface, #FFFFFF); color: var(--text, #172033); border-color: var(--border, #D8DEE6); }
+    .btn-secondary:hover { background: var(--hover, #F8FAFC); }
+    .btn-danger { background: #B91C1C; color: #FFFFFF; border-color: #B91C1C; }
+    .btn-danger:hover { background: #991B1B; }
+
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .font-mono { font-family: monospace; }
+    .font-medium { font-weight: 600; }
+    .font-bold { font-weight: 700; }
+    .text-blue { color: var(--accent, #2563EB); }
+
+    /* Dark Mode Overrides */
+    html[data-theme="dark"] .demo-ops-root {
+        color: #F5F5F7;
+        background: #09090B;
+    }
+    html[data-theme="dark"] .demo-card,
+    html[data-theme="dark"] .demo-sticky-bar {
+        background: #1C1C1E;
+        border-color: rgba(235, 235, 245, 0.15);
+    }
+    html[data-theme="dark"] .demo-bc-bold,
+    html[data-theme="dark"] .demo-main-title,
+    html[data-theme="dark"] .demo-section-title,
+    html[data-theme="dark"] .demo-filter-title,
+    html[data-theme="dark"] .demo-panel-title,
+    html[data-theme="dark"] .demo-pane-title,
+    html[data-theme="dark"] .demo-user-badge,
+    html[data-theme="dark"] .demo-audit-act,
+    html[data-theme="dark"] .demo-kv-row strong {
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .demo-ghost-btn,
+    html[data-theme="dark"] .demo-subtle-btn,
+    html[data-theme="dark"] .btn-secondary,
+    html[data-theme="dark"] .demo-tab-btn {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.18);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .demo-ghost-btn:hover,
+    html[data-theme="dark"] .demo-subtle-btn:hover,
+    html[data-theme="dark"] .btn-secondary:hover {
+        background: #2C2C2E;
+    }
+    html[data-theme="dark"] .demo-data-table th {
+        background: #242426;
+        color: #A1A1A6;
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .demo-data-table td {
+        border-color: rgba(235, 235, 245, 0.08);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .demo-clickable-row:hover {
+        background: rgba(255, 255, 255, 0.06);
+    }
+    html[data-theme="dark"] .demo-clickable-row.row-selected {
+        background: rgba(10, 132, 255, 0.18);
+    }
+    html[data-theme="dark"] .demo-input,
+    html[data-theme="dark"] .demo-field input,
+    html[data-theme="dark"] .demo-field select {
+        background: #141416;
+        border-color: rgba(235, 235, 245, 0.2);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .demo-cheque-box,
+    html[data-theme="dark"] .demo-canvas-frame,
+    html[data-theme="dark"] .demo-info-drawer,
+    html[data-theme="dark"] .demo-summary-drawer {
+        background: #242426;
+        border-color: rgba(235, 235, 245, 0.12);
+    }
+    html[data-theme="dark"] .demo-cheque-sample {
+        background: #1C1C1E;
+        border-color: rgba(235, 235, 245, 0.18);
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .sample-bank-line,
+    html[data-theme="dark"] .sample-bank-line strong,
+    html[data-theme="dark"] .sample-date strong,
+    html[data-theme="dark"] .sample-payee-line strong,
+    html[data-theme="dark"] .sample-micr-line {
+        color: #F5F5F7;
+    }
+    html[data-theme="dark"] .sample-payee-line {
+        color: #A1A1A6;
+    }
+    html[data-theme="dark"] .sample-amount-box {
+        background: #141416;
+        border-color: rgba(235, 235, 245, 0.2);
+        color: #60A5FA;
+    }
+    html[data-theme="dark"] .sample-sig-svg path {
+        stroke: #60A5FA;
+    }
+    html[data-theme="dark"] .demo-sig-svg path {
+        stroke: #60A5FA;
+    }
+    html[data-theme="dark"] .btn-primary {
+        background: #0A84FF;
+        border-color: #0A84FF;
+        color: #FFFFFF;
+    }
+    html[data-theme="dark"] .demo-tab-btn.active {
+        background: #0A84FF;
+        border-color: #0A84FF;
+        color: #FFFFFF;
+    }
+</style>
+
+@code {
+    private bool _reviewMode;
+    private bool _showHeaderInfo;
+    private bool _showSummary;
+    private bool _filtersCollapsed;
+    private bool _auditOpen = true;
+
+    private string _filterBatchId = string.Empty;
+    private string _filterBranchCode = string.Empty;
+    private string _filterChequeNo = string.Empty;
+    private string _filterMicrAccount = string.Empty;
+    private string _filterRoutingNo = string.Empty;
+    private string _filterCreditAccount = string.Empty;
+    private string _filterAmount = string.Empty;
+    private string _filterEndorsement = string.Empty;
+    private string _filterBatchType = string.Empty;
+    private DateTime? _filterValueDate;
+    private DateTime? _filterScanDate;
+
+    private string _imageView = "front";
+    private string _checkerRemarks = string.Empty;
+    private bool _batchRemarks;
+
+    private List<DemoBatchModel> _batchRows = [];
+    private DemoBatchModel? _selectedBatch;
+    private DemoChequeModel? _activeCheque;
+
+    protected override void OnInitialized()
+    {
+        _batchRows = SeedDemoData();
+    }
+
+    private List<DemoBatchModel> SeedDemoData() =>
+    [
+        new DemoBatchModel
+        {
+            BatchNo = "OUTWARD-20260811-121-DMO-admin1-007-000",
+            BranchCode = "000",
+            BranchName = "Head Office",
+            Maker = "admin1",
+            BatchAmount = 688500m,
+            CalculatedAmount = 688500m,
+            ScanDateTime = DateTime.Parse("2026-08-11 14:00:37"),
+            SlaAge = "29d 1h",
+            HasException = false,
+            Cheques =
+            [
+                new() {
+                    ChequeId = "CHQ-930101",
+                    ChequeNo = "930101",
+                    RoutingNo = "200101",
+                    AccountNo = "001000245117999",
+                    Amount = 125000m,
+                    DrawerName = "Demo Trading Co.",
+                    Uic = "20260811-MMDB-000-FB30U-1107-000001",
+                    Discarded = false
+                },
+                new() {
+                    ChequeId = "CHQ-930102",
+                    ChequeNo = "930102",
+                    RoutingNo = "200102",
+                    AccountNo = "001000245117999",
+                    Amount = 245500m,
+                    DrawerName = "Demo Trading Co.",
+                    Uic = "20260811-MMDB-000-FB30U-1107-000002",
+                    Discarded = false
+                },
+                new() {
+                    ChequeId = "CHQ-930103",
+                    ChequeNo = "930103",
+                    RoutingNo = "200103",
+                    AccountNo = "001000245117999",
+                    Amount = 318000m,
+                    DrawerName = "Demo Trading Co.",
+                    Uic = "20260811-MMDB-000-FB30U-1107-000003",
+                    Discarded = false
+                }
+            ]
+        }
+    ];
+
+    private decimal TotalQueueAmount => _batchRows.Sum(b => b.BatchAmount);
+    private int ExceptionBatchCount => _batchRows.Count(b => b.HasException);
+    private string OldestBatchAge => _batchRows.FirstOrDefault()?.SlaAge ?? "None";
+
+    private List<DemoBatchModel> FilteredBatchRows => _batchRows.Where(b =>
+        (string.IsNullOrWhiteSpace(_filterBatchId) || b.BatchNo.Contains(_filterBatchId, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterBranchCode) || b.BranchCode.Contains(_filterBranchCode, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterChequeNo) || b.Cheques.Any(c => c.ChequeNo.Contains(_filterChequeNo))) &&
+        (string.IsNullOrWhiteSpace(_filterMicrAccount) || b.Cheques.Any(c => c.AccountNo.Contains(_filterMicrAccount))) &&
+        (string.IsNullOrWhiteSpace(_filterRoutingNo) || b.Cheques.Any(c => c.RoutingNo.Contains(_filterRoutingNo))) &&
+        (string.IsNullOrWhiteSpace(_filterAmount) || b.BatchAmount.ToString().Contains(_filterAmount))
+    ).ToList();
+
+    private void ClearFilters()
+    {
+        _filterBatchId = string.Empty;
+        _filterBranchCode = string.Empty;
+        _filterChequeNo = string.Empty;
+        _filterMicrAccount = string.Empty;
+        _filterRoutingNo = string.Empty;
+        _filterCreditAccount = string.Empty;
+        _filterAmount = string.Empty;
+        _filterEndorsement = string.Empty;
+        _filterBatchType = string.Empty;
+        _filterValueDate = null;
+        _filterScanDate = null;
+    }
+
+    private void ToggleHeaderInfo() => _showHeaderInfo = !_showHeaderInfo;
+
+    private void OpenBatchReview(DemoBatchModel batch)
+    {
+        _selectedBatch = batch;
+        _activeCheque = batch.Cheques.FirstOrDefault();
+        _reviewMode = true;
+        _imageView = "front";
+        _checkerRemarks = string.Empty;
+    }
+
+    private void SelectCheque(DemoChequeModel cheque)
+    {
+        _activeCheque = cheque;
+    }
+
+    private void ToggleDiscard(ChangeEventArgs e)
+    {
+        if (_activeCheque is not null)
+        {
+            _activeCheque.Discarded = (bool)(e.Value ?? false);
+        }
+    }
+
+    private void PrevCheque()
+    {
+        if (_selectedBatch is null || _selectedBatch.Cheques.Count == 0) return;
+        var idx = _selectedBatch.Cheques.FindIndex(c => c.ChequeId == _activeCheque?.ChequeId);
+        if (idx > 0) _activeCheque = _selectedBatch.Cheques[idx - 1];
+    }
+
+    private void NextCheque()
+    {
+        if (_selectedBatch is null || _selectedBatch.Cheques.Count == 0) return;
+        var idx = _selectedBatch.Cheques.FindIndex(c => c.ChequeId == _activeCheque?.ChequeId);
+        if (idx >= 0 && idx < _selectedBatch.Cheques.Count - 1) _activeCheque = _selectedBatch.Cheques[idx + 1];
+    }
+
+    private void ExitReview()
+    {
+        _reviewMode = false;
+        _selectedBatch = null;
+        _activeCheque = null;
+    }
+
+    private void DoBatchAction(string action)
+    {
+        // Executes action and returns to queue
+        ExitReview();
+    }
+
+    private int ActiveAcceptCount => _selectedBatch?.Cheques.Count(c => !c.Discarded) ?? 0;
+    private int ActiveDiscardCount => _selectedBatch?.Cheques.Count(c => c.Discarded) ?? 0;
+    private decimal ActiveAcceptedAmount => _selectedBatch?.Cheques.Where(c => !c.Discarded).Sum(c => c.Amount) ?? 0;
+
+    private sealed class DemoBatchModel
+    {
+        public string BatchNo { get; set; } = string.Empty;
+        public string BranchCode { get; set; } = string.Empty;
+        public string BranchName { get; set; } = string.Empty;
+        public string Maker { get; set; } = string.Empty;
+        public decimal BatchAmount { get; set; }
+        public decimal CalculatedAmount { get; set; }
+        public DateTime ScanDateTime { get; set; }
+        public string SlaAge { get; set; } = string.Empty;
+        public bool HasException { get; set; }
+        public List<DemoChequeModel> Cheques { get; set; } = [];
+    }
+
+    private sealed class DemoChequeModel
+    {
+        public string ChequeId { get; set; } = string.Empty;
+        public string ChequeNo { get; set; } = string.Empty;
+        public string RoutingNo { get; set; } = string.Empty;
+        public string AccountNo { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string DrawerName { get; set; } = string.Empty;
+        public string Uic { get; set; } = string.Empty;
+        public bool Discarded { get; set; }
+    }
+}
