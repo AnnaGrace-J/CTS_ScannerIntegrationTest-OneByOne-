@@ -264,6 +264,11 @@
                     <label class="form-field-label">CLEARING CYCLE</label>
                     <input class="demo-form-input" disabled value="1" />
                 </div>
+                <div class="form-group-item" style="margin-top:8px;">
+                    <button class="demo-action-btn btn-secondary" style="width:100%;" @onclick="ResetScannerSensors">
+                        ⟳ Reset Scanner Sensors
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -1937,6 +1942,7 @@
     private string _success = "";
     private List<string> _validationErrors = new();
     private bool _isPaperWaitingInTrack = false;
+    private string _pausedScanMode = "Offline";
     private DraftCheque? _pausedCheque = null;
 
     // Modals state
@@ -2166,66 +2172,87 @@
             {
                 BatchId = _currentBatch!.BatchNo,
                 BranchCode = "001",
-                LowSpeedMode = false,
+                LowSpeedMode = true,
                 EnableUv = true,
                 ResolutionDpi = 200
             };
 
             var httpResp = await client.PostAsJsonAsync("http://localhost:18080/api/scanner/feed-single", req);
-            if (httpResp.IsSuccessStatusCode)
+            if (!httpResp.IsSuccessStatusCode)
             {
-                var scanResult = await httpResp.Content.ReadFromJsonAsync<Result<ScanOneResponse>>();
-                if (scanResult != null && scanResult.IsSuccess && scanResult.Data?.Cheque != null)
-                {
-                    var sc = scanResult.Data.Cheque;
-                    var seq = _drafts.Count + 1;
-                    var acc = _accounts[(seq - 1) % _accounts.Count];
+                _message = $"Scanner Agent returned HTTP {(int)httpResp.StatusCode}.";
+                _validationErrors.Clear();
+                _validationErrors.Add($"Scanner Alert: {_message}");
+                StateHasChanged();
+                return;
+            }
 
-                    _pausedCheque = new DraftCheque
-                    {
-                        Id = $"SCAN-{_currentBatch!.BatchNo}-{seq}",
-                        ChequeNo = sc.ChequeNumber,
-                        AccountNo = acc.AccountNo,
-                        MicrAccountNo = sc.MicrAccount,
-                        MicrRoutingNumber = sc.RoutingNumber,
-                        BankName = "Kanbawza Bank (KBZ)",
-                        ChequeType = "Current Dated Normal",
-                        CheckDigit = sc.CheckDigit,
-                        Amount = "1500000",
-                        ChequeDate = DateTime.Today.ToString("yyyy-MM-dd"),
-                        DrawerName = $"Drawer {seq}",
-                        Remarks = "",
-                        Discard = false,
-                        Uic = $"UIC{DateTime.Today:yyyyMMdd}HOFB30U{seq:D4}",
-                        AccountFetched = true,
-                        Account = acc,
-                        FrontImageBase64 = sc.FrontImageBase64,
-                        RearImageBase64 = sc.RearImageBase64,
-                        UvImageBase64 = sc.UvImageBase64,
-                        IsWaitingEjection = true,
-                        ImageQualityFlags = sc.IqaPassed ? new List<string>() : new List<string> { sc.IqaDetails ?? "IQA Warning" }
-                    };
+            var scanResult = await httpResp.Content.ReadFromJsonAsync<Result<ScanOneResponse>>();
+            if (scanResult != null && scanResult.IsSuccess && scanResult.Data?.Cheque != null)
+            {
+                var sc = scanResult.Data.Cheque;
+                var seq = _drafts.Count + 1;
+                var acc = _accounts[(seq - 1) % _accounts.Count];
 
-                    _isPaperWaitingInTrack = true;
-                    _message = "Cheque fed and scanned. Paper paused in track waiting for ejection decision.";
-                    _success = $"Cheque No. {sc.ChequeNumber} captured in track ({scanResult.Data.Mode}). Please choose Eject action.";
-                    _validationErrors.Clear();
-                    StateHasChanged();
-                    return;
-                }
-                else if (scanResult != null && scanResult.IsFailure)
+                _pausedCheque = new DraftCheque
                 {
-                    _message = scanResult.Message ?? "Scanner hardware error occurred.";
-                    _validationErrors.Clear();
-                    _validationErrors.Add($"Scanner Alert: {_message}");
-                    StateHasChanged();
-                    return;
-                }
+                    Id = $"SCAN-{_currentBatch!.BatchNo}-{seq}",
+                    ChequeNo = sc.ChequeNumber,
+                    AccountNo = acc.AccountNo,
+                    MicrAccountNo = sc.MicrAccount,
+                    MicrRoutingNumber = sc.RoutingNumber,
+                    BankName = "Kanbawza Bank (KBZ)",
+                    ChequeType = "Current Dated Normal",
+                    CheckDigit = sc.CheckDigit,
+                    Amount = "1500000",
+                    ChequeDate = DateTime.Today.ToString("yyyy-MM-dd"),
+                    DrawerName = $"Drawer {seq}",
+                    Remarks = "",
+                    Discard = false,
+                    Uic = $"UIC{DateTime.Today:yyyyMMdd}HOFB30U{seq:D4}",
+                    AccountFetched = true,
+                    Account = acc,
+                    FrontImageBase64 = sc.FrontImageBase64,
+                    RearImageBase64 = sc.RearImageBase64,
+                    UvImageBase64 = sc.UvImageBase64,
+                    IsWaitingEjection = true,
+                    ImageQualityFlags = sc.IqaPassed ? new List<string>() : new List<string> { sc.IqaDetails ?? "IQA Warning" }
+                };
+
+                _pausedScanMode = scanResult.Data.Mode;
+                _isPaperWaitingInTrack = true;
+                _message = _pausedScanMode == "Hardware" && string.IsNullOrEmpty(sc.FrontImageBase64)
+                    ? "Cheque MICR captured and paused in track. Choose Eject & Print or Eject Clean to capture images and discharge."
+                    : "Cheque fed and scanned. Paper paused in track waiting for ejection decision.";
+                _success = $"Cheque No. {sc.ChequeNumber} captured in track ({_pausedScanMode}). Please choose Eject action.";
+                _validationErrors.Clear();
+                StateHasChanged();
+                return;
+            }
+            else if (scanResult != null && scanResult.IsFailure)
+            {
+                _message = scanResult.Message ?? "Scanner hardware error occurred.";
+                _validationErrors.Clear();
+                _validationErrors.Add($"Scanner Alert: {_message}");
+                StateHasChanged();
+                return;
             }
         }
-        catch
+        catch (HttpRequestException)
         {
-            // Fallback standalone simulation
+            // Agent unreachable -> fallback standalone simulation
+        }
+        catch (TaskCanceledException)
+        {
+            // Agent timed out -> fallback standalone simulation
+        }
+        catch (Exception ex)
+        {
+            _message = $"Scanner communication error: {ex.Message}";
+            _validationErrors.Clear();
+            _validationErrors.Add($"Scanner Alert: {_message}");
+            StateHasChanged();
+            return;
         }
 
         ScanSingleChequeFallback();
@@ -2259,6 +2286,7 @@
             ImageQualityFlags = new List<string>()
         };
 
+        _pausedScanMode = "Offline";
         _isPaperWaitingInTrack = true;
         _message = "Cheque fed and scanned. Paper paused in track waiting for ejection decision.";
         _success = $"Cheque No. {_pausedCheque.ChequeNo} captured in track (Offline Standby).";
@@ -2272,47 +2300,115 @@
     {
         if (_pausedCheque == null) return;
 
-        try
+        if (_pausedScanMode != "Offline")
         {
-            using var client = HttpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(15);
-
-            var req = new EjectChequeRequest
+            try
             {
-                Pocket = 1,
-                PrintEndorsement = print,
-                CustomEndorsementText = $"ACE CTS * BR001 * {DateTime.Today:yyyyMMdd} * UIC:{_pausedCheque.Uic}"
-            };
+                using var client = HttpClientFactory.CreateClient();
+                client.Timeout = TimeSpan.FromSeconds(20);
 
-            var httpResp = await client.PostAsJsonAsync("http://localhost:18080/api/scanner/eject", req);
-            if (httpResp.IsSuccessStatusCode)
-            {
-                var ejectResult = await httpResp.Content.ReadFromJsonAsync<Result<EjectChequeResponse>>();
-                if (ejectResult != null && ejectResult.IsFailure)
+                var req = new EjectChequeRequest
+                {
+                    Pocket = 1,
+                    PrintEndorsement = print,
+                    CustomEndorsementText = $"ACE CTS CLEARED%LBR001 {DateTime.Today:yyyy/MM/dd} {DateTime.Now:HH:mm:ss}%LUIC:{_pausedCheque.Uic}%L"
+                };
+
+                var httpResp = await client.PostAsJsonAsync("http://localhost:18080/api/scanner/eject", req);
+                if (!httpResp.IsSuccessStatusCode)
                 {
                     _validationErrors.Clear();
-                    _validationErrors.Add($"Eject Alert: {ejectResult.Message}");
+                    _validationErrors.Add($"Eject Alert: Scanner Agent returned HTTP {(int)httpResp.StatusCode}.");
                     StateHasChanged();
                     return;
                 }
+
+                var ejectResult = await httpResp.Content.ReadFromJsonAsync<Result<EjectChequeResponse>>();
+                if (ejectResult == null || ejectResult.IsFailure)
+                {
+                    _validationErrors.Clear();
+                    _validationErrors.Add($"Eject Alert: {ejectResult?.Message ?? "Unknown eject error."}");
+                    StateHasChanged();
+                    return;
+                }
+
+                if (ejectResult.Data != null)
+                {
+                    if (!string.IsNullOrEmpty(ejectResult.Data.FrontImageBase64))
+                    {
+                        _pausedCheque.FrontImageBase64 = ejectResult.Data.FrontImageBase64;
+                    }
+                    if (!string.IsNullOrEmpty(ejectResult.Data.RearImageBase64))
+                    {
+                        _pausedCheque.RearImageBase64 = ejectResult.Data.RearImageBase64;
+                    }
+                    if (!string.IsNullOrEmpty(ejectResult.Data.UvImageBase64))
+                    {
+                        _pausedCheque.UvImageBase64 = ejectResult.Data.UvImageBase64;
+                    }
+                }
             }
-        }
-        catch
-        {
-            // Offline fallback proceeds with local state
+            catch (Exception ex)
+            {
+                if (_pausedScanMode == "Hardware")
+                {
+                    _validationErrors.Clear();
+                    _validationErrors.Add($"Eject Alert: {ex.Message}");
+                    StateHasChanged();
+                    return;
+                }
+                // Simulation agent unreachable: allow offline fallback commit
+            }
         }
 
         _pausedCheque.IsWaitingEjection = false;
         _drafts.Add(_pausedCheque);
         _isPaperWaitingInTrack = false;
+        _pausedScanMode = "Offline";
         _selectedIndex = _drafts.Count - 1;
         _batchAmountInput = CalculatedAmount.ToString("0");
         _message = "";
-        _success = print 
+        _success = print
             ? $"Cheque {_pausedCheque.ChequeNo} endorsed and discharged into Pocket 1."
             : $"Cheque {_pausedCheque.ChequeNo} discharged into Pocket 1 without endorsement.";
         _pausedCheque = null;
         _validationErrors.Clear();
+        StateHasChanged();
+    }
+
+    private async Task ResetScannerSensors()
+    {
+        _validationErrors.Clear();
+        try
+        {
+            using var client = HttpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(15);
+            var httpResp = await client.PostAsync("http://localhost:18080/api/scanner/reset", null);
+            if (!httpResp.IsSuccessStatusCode)
+            {
+                _validationErrors.Add($"Reset Alert: Scanner Agent returned HTTP {(int)httpResp.StatusCode}.");
+                StateHasChanged();
+                return;
+            }
+
+            var resetResult = await httpResp.Content.ReadFromJsonAsync<Result<ScannerResetResponse>>();
+            if (resetResult != null && resetResult.IsSuccess)
+            {
+                _isPaperWaitingInTrack = false;
+                _pausedCheque = null;
+                _pausedScanMode = "Offline";
+                _message = "";
+                _success = resetResult.Message ?? "Scanner sensors reset and clear.";
+            }
+            else
+            {
+                _validationErrors.Add($"Reset Alert: {resetResult?.Message ?? "Sensors not clear."}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _validationErrors.Add($"Reset Alert: {ex.Message}");
+        }
         StateHasChanged();
     }
 

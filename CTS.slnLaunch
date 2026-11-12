@@ -11,6 +11,11 @@
         "Path": "CTS.App\\CTS.App.csproj",
         "Action": "Start",
         "DebugTarget": "http"
+      },
+      {
+        "Path": "CTS.ScannerAgent\\CTS.ScannerAgent.csproj",
+        "Action": "Start",
+        "DebugTarget": "CTS.ScannerAgent"
       }
     ]
   }

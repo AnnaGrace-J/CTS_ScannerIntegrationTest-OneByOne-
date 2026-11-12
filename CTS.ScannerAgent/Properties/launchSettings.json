@@ -2,11 +2,11 @@
   "profiles": {
     "CTS.ScannerAgent": {
       "commandName": "Project",
-      "launchBrowser": true,
+      "launchBrowser": false,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "applicationUrl": "https://localhost:61344;http://localhost:61345"
+      "applicationUrl": "http://localhost:18080"
     }
   }
 }

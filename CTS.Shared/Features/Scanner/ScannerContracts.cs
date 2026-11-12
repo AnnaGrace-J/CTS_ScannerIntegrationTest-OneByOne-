@@ -55,6 +55,9 @@ public class EjectChequeResponse
     public bool Ejected { get; set; }
     public bool EndorsementPrinted { get; set; }
     public string Message { get; set; } = string.Empty;
+    public string? FrontImageBase64 { get; set; }
+    public string? RearImageBase64 { get; set; }
+    public string? UvImageBase64 { get; set; }
 }
 
 public class ScannerResetResponse
